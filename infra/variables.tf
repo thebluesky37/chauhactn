@@ -57,3 +57,9 @@ variable "log_retention_days" {
   type    = number
   default = 14
 }
+
+variable "web_url_default" {
+  description = "Địa chỉ web khi chưa bật tên miền riêng (Amplify). Dùng cho CORS và link trong Excel. Không tham chiếu trực tiếp aws_amplify_app để tránh vòng phụ thuộc với API."
+  type        = string
+  default     = "https://main.d3qgh605bxly24.amplifyapp.com"
+}
