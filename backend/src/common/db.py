@@ -3,7 +3,12 @@ import uuid
 from datetime import datetime, timezone
 
 import boto3
+from botocore.config import Config
 from boto3.dynamodb.conditions import Key
+
+# SigV4 + endpoint theo vùng: mặc định boto3 ký SigV2 vào s3.amazonaws.com, bucket ngoài us-east-1 sẽ bị S3
+# chuyển hướng (307) và trình duyệt chặn vì CORS preflight không được phép chuyển hướng.
+_S3_CONFIG = Config(signature_version="s3v4", s3={"addressing_style": "virtual"})
 
 _table = None
 _s3 = None
@@ -20,7 +25,7 @@ def table():
 def s3():
     global _s3
     if _s3 is None:
-        _s3 = boto3.client("s3")
+        _s3 = boto3.client("s3", config=_S3_CONFIG)
     return _s3
 
 
@@ -31,7 +36,7 @@ def s3_presign():
     if not public:
         return s3()
     if _s3_presign is None:
-        _s3_presign = boto3.client("s3", endpoint_url=public)
+        _s3_presign = boto3.client("s3", endpoint_url=public, config=Config(signature_version="s3v4", s3={"addressing_style": "path"}))
     return _s3_presign
 
 
