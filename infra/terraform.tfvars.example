@@ -1,0 +1,4 @@
+admin_email         = "thebluesky37@gmail.com"
+github_repository   = "https://github.com/<user>/quan-ly-du-an"
+# github_access_token: đặt bằng biến môi trường TF_VAR_github_access_token, không ghi vào file
+enable_custom_domains = false

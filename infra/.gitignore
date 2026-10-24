@@ -1,0 +1,10 @@
+.terraform/
+.build/
+*.tfstate*
+terraform.tfvars
+
+# hệ thống mới
+frontend/node_modules
+frontend/dist
+backend/**/__pycache__
+.pytest_cache

@@ -1,0 +1,56 @@
+# Môi trường test local trước khi deploy AWS.
+# Chạy: docker compose -f docker-compose.local.yml up --build
+# Web: http://localhost:5173   API: http://localhost:8000   LocalStack: http://localhost:4566
+# (Khác với docker-compose.yml của hệ thống Node.js cũ.)
+name: quanly-local
+
+services:
+  localstack:
+    image: localstack/localstack:3.8
+    ports:
+      - "4566:4566"
+    environment:
+      SERVICES: s3,dynamodb
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:4566/_localstack/health"]
+      interval: 3s
+      retries: 20
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.local
+    depends_on:
+      localstack:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    environment:
+      AWS_ENDPOINT_URL: http://localstack:4566
+      AWS_DEFAULT_REGION: ap-southeast-1
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      TABLE_NAME: pm-main
+      FILES_BUCKET: pm-files-local
+      # URL ký sẵn phải trỏ tới địa chỉ mà trình duyệt truy cập được.
+      S3_PUBLIC_ENDPOINT: http://localhost:4566
+      DEV_ADMIN_TOKEN: dev-admin
+      WEB_BASE_URL: http://localhost:5173
+
+  frontend:
+    image: node:20-alpine
+    working_dir: /app
+    volumes:
+      - ./frontend:/app
+      - frontend_node_modules:/app/node_modules
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+    ports:
+      - "5173:5173"
+    environment:
+      VITE_API_URL: http://localhost:8000
+      VITE_DEV_AUTH: "true"
+    depends_on:
+      - api
+
+volumes:
+  frontend_node_modules:

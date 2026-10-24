@@ -1,0 +1,51 @@
+name: backend-infra
+
+on:
+  pull_request:
+    paths: ["backend/**", "infra/**"]
+  push:
+    branches: [main]
+    paths: ["backend/**", "infra/**"]
+
+permissions:
+  id-token: write # OIDC: không lưu khóa AWS lâu dài trong GitHub
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install -r backend/requirements-dev.txt
+      - run: pytest backend/tests -q
+
+  terraform:
+    needs: test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra
+    env:
+      TF_VAR_admin_email: ${{ vars.ADMIN_EMAIL }}
+      TF_VAR_github_repository: ${{ vars.GH_REPOSITORY_URL }}
+      TF_VAR_github_access_token: ${{ secrets.AMPLIFY_GITHUB_TOKEN }}
+      TF_VAR_enable_custom_domains: ${{ vars.ENABLE_CUSTOM_DOMAINS || 'false' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ap-southeast-1
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" } # pip cho bước dựng Lambda layer
+      - uses: hashicorp/setup-terraform@v3
+        with: { terraform_version: "1.10.0" }
+      - run: terraform init
+      - run: terraform fmt -check
+      - run: terraform validate
+      - run: terraform plan -out=tfplan
+      - name: Apply (chỉ khi gộp vào main)
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: terraform apply -auto-approve tfplan

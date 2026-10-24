@@ -1,0 +1,7 @@
+FROM python:3.12-slim
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir boto3 -r requirements.txt
+COPY src ./src
+COPY local ./local
+CMD ["sh", "-c", "python local/bootstrap.py && python local/server.py"]
