@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { login } from "../lib/auth";
+import { login, setNewPassword } from "../lib/auth";
 import { ErrorBox, Field } from "../components/ui";
 
 export default function Login() {
@@ -10,13 +10,23 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
+  const [session, setSession] = useState<string | null>(null);
+  const [newPassword, setNewPass] = useState("");
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
     setError(null);
     try {
-      await login(email, password);
+      if (session) {
+        await setNewPassword(email, newPassword, session);
+      } else {
+        const r = await login(email, password);
+        if (r.newPasswordSession) {
+          setSession(r.newPasswordSession);
+          return;
+        }
+      }
       const next = params.get("next");
       nav(next && next.startsWith("/") && !next.startsWith("//") ? next : "/admin");
     } catch (err) {
@@ -34,9 +44,17 @@ export default function Login() {
         <input className="input" type="email" required autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} />
       </Field>
       <Field label="Mật khẩu">
-        <input className="input" type="password" required autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
+        <input className="input" type="password" required autoComplete="current-password" disabled={!!session} value={password} onChange={(e) => setPassword(e.target.value)} />
       </Field>
-      <button className="btn-primary w-full" disabled={busy}>{busy ? "Đang đăng nhập…" : "Đăng nhập"}</button>
+      {session ? (
+        <>
+          <p className="text-sm text-slate-600">Đăng nhập lần đầu: hãy đặt mật khẩu mới (tối thiểu 12 ký tự, có chữ hoa, chữ thường và số).</p>
+          <Field label="Mật khẩu mới">
+            <input className="input" type="password" required minLength={12} autoComplete="new-password" value={newPassword} onChange={(e) => setNewPass(e.target.value)} />
+          </Field>
+        </>
+      ) : null}
+      <button className="btn-primary w-full" disabled={busy}>{busy ? "Đang xử lý…" : session ? "Đặt mật khẩu và đăng nhập" : "Đăng nhập"}</button>
     </form>
   );
 }
