@@ -222,15 +222,21 @@ resource "aws_iam_role_policy" "admin" {
     Statement = [
       {
         Effect   = "Allow"
-        Action   = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:Query", "dynamodb:Scan"]
+        Action   = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:DeleteItem", "dynamodb:BatchWriteItem", "dynamodb:Query", "dynamodb:Scan"]
         Resource = [aws_dynamodb_table.main.arn, "${aws_dynamodb_table.main.arn}/index/*"]
       },
       {
         Effect = "Allow"
         Action = [
-          "s3:GetObject", "s3:PutObject", "s3:AbortMultipartUpload", "s3:ListMultipartUploadParts"
+          "s3:GetObject", "s3:PutObject", "s3:AbortMultipartUpload", "s3:ListMultipartUploadParts",
+          "s3:DeleteObject", "s3:DeleteObjectVersion"  # xóa dự án: bucket bật versioning nên phải xóa từng phiên bản
         ]
         Resource = "${aws_s3_bucket.files.arn}/*"
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["s3:ListBucket", "s3:ListBucketVersions", "s3:ListBucketMultipartUploads"]
+        Resource = aws_s3_bucket.files.arn
       },
       {
         Effect   = "Allow"
@@ -310,7 +316,7 @@ resource "aws_apigatewayv2_api" "api" {
 
   cors_configuration {
     allow_origins = [local.web_origin, "http://localhost:5173"]
-    allow_methods = ["GET", "POST", "PUT", "PATCH", "OPTIONS"]
+    allow_methods = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
     allow_headers = ["authorization", "content-type"]
     max_age       = 3600
   }
@@ -351,7 +357,7 @@ resource "aws_apigatewayv2_route" "public" {
 # Các method khai báo riêng, KHÔNG dùng ANY: OPTIONS không khớp route nào nên API Gateway tự trả preflight CORS
 # (không cần token). Có route OPTIONS hoặc ANY thì preflight bị đẩy vào Lambda/authorizer và lỗi.
 locals {
-  admin_methods = ["GET", "POST", "PUT", "PATCH"]
+  admin_methods = ["GET", "POST", "PUT", "PATCH", "DELETE"]
 }
 
 resource "aws_apigatewayv2_route" "admin" {

@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
 import { api, patch, post, type Project } from "../lib/api";
 import { fmtDate } from "../lib/format";
+import { DeleteProject } from "../components/DeleteProject";
 import { Empty, ErrorBox, Field, Skeleton, StatusBadge } from "../components/ui";
 
 export default function AdminProjects() {
@@ -59,6 +60,9 @@ export default function AdminProjects() {
                   />
                   Cho phép Khách xem
                 </label>
+              </div>
+              <div className="w-full sm:w-auto">
+                <DeleteProject id={p.id} name={p.name} onDeleted={() => qc.invalidateQueries({ queryKey: ["admin-projects"] })} />
               </div>
             </div>
           ))}

@@ -105,3 +105,41 @@ def _quote(s):
     from urllib.parse import quote
 
     return quote(s, safe="")
+
+
+def _delete_prefix(prefix):
+    """Xóa mọi phiên bản và delete marker dưới prefix (bucket bật versioning), rồi hủy upload dở dang."""
+    client, name = s3(), bucket()
+    deleted = 0
+    for page in client.get_paginator("list_object_versions").paginate(Bucket=name, Prefix=prefix):
+        objs = [
+            {"Key": o["Key"], "VersionId": o["VersionId"]}
+            for o in page.get("Versions", []) + page.get("DeleteMarkers", [])
+        ]
+        for i in range(0, len(objs), 1000):
+            client.delete_objects(Bucket=name, Delete={"Objects": objs[i:i + 1000], "Quiet": True})
+        deleted += len(objs)
+    for page in client.get_paginator("list_multipart_uploads").paginate(Bucket=name, Prefix=prefix):
+        for u in page.get("Uploads", []):
+            client.abort_multipart_upload(Bucket=name, Key=u["Key"], UploadId=u["UploadId"])
+    return deleted
+
+
+def delete_project_data(project_id):
+    """Xóa toàn bộ dữ liệu của dự án: file trên S3 (kể cả báo cáo đã xuất), bản ghi, lịch sử sửa.
+
+    Bản ghi META xóa sau cùng: nếu giữa chừng lỗi, dự án vẫn còn và có thể xóa lại.
+    Nhật ký AUDIT được giữ nguyên.
+    """
+    pk = f"PROJECT#{project_id}"
+    items = query_all(pk)
+    files = _delete_prefix(f"projects/{project_id}/") + _delete_prefix(f"exports/{project_id}/")
+    keys = [{"PK": it["PK"], "SK": it["SK"]} for it in items if it["SK"] != "META"]
+    for it in items:
+        if it["SK"].startswith("UPLOAD#"):
+            keys += [{"PK": r["PK"], "SK": r["SK"]} for r in query_all(f"UPLOAD#{it['id']}")]
+    with table().batch_writer() as batch:
+        for k in keys:
+            batch.delete_item(Key=k)
+    table().delete_item(Key={"PK": pk, "SK": "META"})
+    return {"files": files, "records": len(keys) + 1}

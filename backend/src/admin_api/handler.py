@@ -137,6 +137,16 @@ def update_project(event, project_id):
     return response(200, db.strip_keys(item))
 
 
+@router.route("DELETE", "/projects/{project_id}")
+def delete_project(event, project_id):
+    """Xóa vĩnh viễn dự án cùng mọi dữ liệu và file đã tải lên. Không hoàn tác được."""
+    _require_admin(event)
+    item = _project_or_404(project_id)
+    removed = db.delete_project_data(project_id)
+    _audit(event, "project.delete", {"id": project_id, "name": item["name"], **removed})
+    return response(200, {"deleted": project_id, **removed})
+
+
 @router.route("PUT", "/projects/{project_id}/note")
 def set_note(event, project_id):
     _require_admin(event)

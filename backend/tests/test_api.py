@@ -167,3 +167,53 @@ def test_export_file_links():
     assert links == ["https://www.hachauctn.id.vn/download?p=p1&k=projects%2Fp1%2Fx%2Fban%20ve.pdf"]
     ws = load_workbook(io.BytesIO(build_workbook(view))).active
     assert not [c for row in ws.iter_rows() for c in row if c.hyperlink]
+
+
+def test_delete_project_removes_everything(aws):
+    from admin_api import handler as admin
+    from common import db
+
+    s3 = boto3.client("s3", region_name="ap-southeast-1")
+    s3.put_bucket_versioning(Bucket="files", VersioningConfiguration={"Status": "Enabled"})
+
+    def make_project(name):
+        _, p = call(admin, event("POST", "/admin/projects", {"name": name, "startDate": "2026-01-01", "plannedEndDate": "2026-12-31"}))
+        _, party = call(admin, event("POST", f"/admin/projects/{p['id']}/parties", {"type": "investor", "name": "CĐT"}))
+        key = f"projects/{p['id']}/abc/f.pdf"
+        s3.put_object(Bucket="files", Key=key, Body=b"1")
+        s3.put_object(Bucket="files", Key=key, Body=b"22")  # 2 phiên bản
+        _, up = call(admin, event("POST", f"/admin/projects/{p['id']}/uploads", {
+            "partyType": "investor", "partyId": party["id"], "sentDate": "2026-02-01", "files": [{"name": "f.pdf", "key": key}]}))
+        call(admin, event("PATCH", f"/admin/projects/{p['id']}/uploads/{up['id']}", {"hidden": True}))  # tạo REV
+        call(admin, event("PUT", f"/admin/projects/{p['id']}/note", {"text": "x"}))
+        return p["id"], up["id"]
+
+    keep, _ = make_project("Giữ lại")
+    gone, upload_id = make_project("Sẽ xóa")
+    s3.put_object(Bucket="files", Key=f"exports/{gone}/r.xlsx", Body=b"x")
+    s3.create_multipart_upload(Bucket="files", Key=f"projects/{gone}/dở/dang.pdf")
+
+    # Không phải Admin thì không xóa được và không mất gì.
+    status, _ = call(admin, event("DELETE", f"/admin/projects/{gone}", groups="[]"))
+    assert status == 403
+    assert db.get_project_item(gone) is not None
+
+    status, body = call(admin, event("DELETE", f"/admin/projects/{gone}"))
+    assert status == 200 and body["deleted"] == gone
+    assert body["files"] == 3  # 2 phiên bản + báo cáo xuất
+
+    assert db.get_project_item(gone) is None
+    assert db.query_all(f"PROJECT#{gone}") == []
+    assert db.query_all(f"UPLOAD#{upload_id}") == []  # lịch sử sửa
+    leftovers = s3.list_object_versions(Bucket="files", Prefix=f"projects/{gone}/").get("Versions", [])
+    assert leftovers == []
+    assert s3.list_object_versions(Bucket="files", Prefix=f"exports/{gone}/").get("Versions", []) == []
+    assert s3.list_multipart_uploads(Bucket="files").get("Uploads") is None
+
+    # Dự án khác còn nguyên; nhật ký được giữ.
+    assert db.get_project_item(keep) is not None
+    assert len(db.query_all(f"PROJECT#{keep}")) > 1
+    assert s3.list_object_versions(Bucket="files", Prefix=f"projects/{keep}/")["Versions"]
+    assert any(a["action"] == "project.delete" for pk in db.table().scan()["Items"] for a in [pk] if "action" in a)
+
+    assert call(admin, event("DELETE", f"/admin/projects/{gone}"))[0] == 404

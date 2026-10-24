@@ -1,10 +1,11 @@
 import { useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Download, EyeOff, FileSpreadsheet, FileText } from "lucide-react";
 import { api, patch, type ProjectView, type UploadRecord } from "../lib/api";
 import { fmtDate, fmtDateTime, fmtSize, PARTY_LABEL } from "../lib/format";
 import { Empty, ErrorBox, Skeleton, StatusBadge } from "../components/ui";
+import { DeleteProject } from "../components/DeleteProject";
 import { AddPartyForm, AddTaskForm, NoteForm, UploadForm } from "./AdminPanels";
 
 const TABS = ["Tổng quan", "Các bên", "Hạng mục", "Lịch sử cập nhật"] as const;
@@ -15,6 +16,7 @@ export default function ProjectPage({ admin = false }: { admin?: boolean }) {
   const prefix = admin ? "/admin" : "/public";
   const key = ["project", admin, id];
   const qc = useQueryClient();
+  const nav = useNavigate();
   const refresh = () => qc.invalidateQueries({ queryKey: key });
 
   const { data, isLoading, error } = useQuery({
@@ -51,6 +53,13 @@ export default function ProjectPage({ admin = false }: { admin?: boolean }) {
             <button className="btn-ghost" onClick={() => exportXlsx.mutate()} disabled={exportXlsx.isPending}>
               <FileSpreadsheet size={16} /> {exportXlsx.isPending ? "Đang xuất…" : "Xuất Excel"}
             </button>
+          )}
+          {admin && (
+            <DeleteProject
+              id={id}
+              name={p.name}
+              onDeleted={() => { qc.invalidateQueries({ queryKey: ["admin-projects"] }); nav("/admin"); }}
+            />
           )}
         </div>
       </header>

@@ -1,8 +1,32 @@
-"""Tạo dữ liệu mẫu qua API local rồi tải về file Excel báo cáo: python3 backend/local/export_sample.py <đường dẫn .xlsx>"""
-import json, os, sys, urllib.parse, urllib.request
+"""Tạo dữ liệu mẫu qua API rồi tải về file Excel báo cáo: python3 backend/local/export_sample.py <đường dẫn .xlsx>
+
+Local: không cần cấu hình. Bản thật (Cognito), mật khẩu được hỏi trong terminal, không lưu:
+  API_URL=https://api.hachauctn.id.vn COGNITO_REGION=ap-southeast-2 COGNITO_CLIENT_ID=<id> \
+  ADMIN_EMAIL=<email> python3 backend/local/export_sample.py mau.xlsx
+"""
+import getpass, json, os, sys, urllib.parse, urllib.request
 
 API = os.environ.get("API_URL", "http://localhost:8000")
-H = {"Authorization": "Bearer dev-admin", "Content-Type": "application/json"}
+
+
+def cognito_token():
+    body = {"AuthFlow": "USER_PASSWORD_AUTH", "ClientId": os.environ["COGNITO_CLIENT_ID"],
+            "AuthParameters": {"USERNAME": os.environ["ADMIN_EMAIL"], "PASSWORD": getpass.getpass("Mật khẩu Admin: ")}}
+    r = urllib.request.Request(
+        f"https://cognito-idp.{os.environ['COGNITO_REGION']}.amazonaws.com/", data=json.dumps(body).encode(),
+        headers={"Content-Type": "application/x-amz-json-1.1", "X-Amz-Target": "AWSCognitoIdentityProviderService.InitiateAuth"})
+    try:
+        with urllib.request.urlopen(r) as x:
+            res = json.loads(x.read())
+    except urllib.error.HTTPError:
+        sys.exit("Sai email hoặc mật khẩu")
+    if "AuthenticationResult" not in res:
+        sys.exit("Cần đặt mật khẩu mới: đăng nhập trên web một lần trước")
+    return res["AuthenticationResult"]["IdToken"]
+
+
+TOKEN = cognito_token() if os.environ.get("COGNITO_CLIENT_ID") else "dev-admin"
+H = {"Authorization": f"Bearer {TOKEN}", "Content-Type": "application/json"}
 
 
 def call(m, path, body=None):
