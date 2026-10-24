@@ -361,6 +361,9 @@ resource "aws_apigatewayv2_stage" "default" {
   name        = "$default"
   auto_deploy = true
 
+  # route_settings tham chiếu route_key theo chuỗi nên phải đợi route tạo xong.
+  depends_on = [aws_apigatewayv2_route.public, aws_apigatewayv2_route.admin]
+
   default_route_settings {
     throttling_rate_limit  = 20
     throttling_burst_limit = 40
