@@ -348,21 +348,19 @@ resource "aws_apigatewayv2_route" "public" {
   target    = "integrations/${aws_apigatewayv2_integration.public.id}"
 }
 
+# Các method khai báo riêng, KHÔNG dùng ANY: OPTIONS không khớp route nào nên API Gateway tự trả preflight CORS
+# (không cần token). Có route OPTIONS hoặc ANY thì preflight bị đẩy vào Lambda/authorizer và lỗi.
+locals {
+  admin_methods = ["GET", "POST", "PUT", "PATCH"]
+}
+
 resource "aws_apigatewayv2_route" "admin" {
+  for_each           = toset(local.admin_methods)
   api_id             = aws_apigatewayv2_api.api.id
-  route_key          = "ANY /admin/{proxy+}"
+  route_key          = "${each.key} /admin/{proxy+}"
   target             = "integrations/${aws_apigatewayv2_integration.admin.id}"
   authorization_type = "JWT"
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
-}
-
-# Preflight CORS không mang token: nếu rơi vào route ANY có JWT thì bị 401 và trình duyệt báo lỗi CORS.
-# Route OPTIONS riêng, không xác thực; API Gateway tự trả header CORS theo cors_configuration.
-resource "aws_apigatewayv2_route" "admin_preflight" {
-  api_id             = aws_apigatewayv2_api.api.id
-  route_key          = "OPTIONS /admin/{proxy+}"
-  target             = "integrations/${aws_apigatewayv2_integration.admin.id}"
-  authorization_type = "NONE"
 }
 
 resource "aws_apigatewayv2_stage" "default" {
@@ -371,16 +369,19 @@ resource "aws_apigatewayv2_stage" "default" {
   auto_deploy = true
 
   # route_settings tham chiếu route_key theo chuỗi nên phải đợi route tạo xong.
-  depends_on = [aws_apigatewayv2_route.public, aws_apigatewayv2_route.admin, aws_apigatewayv2_route.admin_preflight]
+  depends_on = [aws_apigatewayv2_route.public, aws_apigatewayv2_route.admin]
 
   default_route_settings {
     throttling_rate_limit  = 20
     throttling_burst_limit = 40
   }
-  route_settings {
-    route_key              = "ANY /admin/{proxy+}"
-    throttling_rate_limit  = 10
-    throttling_burst_limit = 20
+  dynamic "route_settings" {
+    for_each = local.admin_methods
+    content {
+      route_key              = "${route_settings.value} /admin/{proxy+}"
+      throttling_rate_limit  = 10
+      throttling_burst_limit = 20
+    }
   }
 }
 
