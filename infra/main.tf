@@ -245,7 +245,7 @@ resource "aws_iam_role_policy" "admin" {
 resource "terraform_data" "layer" {
   triggers_replace = filemd5("${path.module}/../backend/requirements.txt")
   provisioner "local-exec" {
-    command = "rm -rf ${path.module}/.build/layer && pip install -r ${path.module}/../backend/requirements.txt -t ${path.module}/.build/layer/python --platform manylinux2014_aarch64 --only-binary=:all: --python-version 3.12 --implementation cp --quiet"
+    command = "rm -rf ${path.module}/.build/layer && python3 -m pip install -r ${path.module}/../backend/requirements.txt -t ${path.module}/.build/layer/python --platform manylinux2014_aarch64 --only-binary=:all: --python-version 3.12 --implementation cp --quiet"
   }
 }
 

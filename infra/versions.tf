@@ -9,14 +9,12 @@ terraform {
   # backend "s3" {
   #   bucket       = "hachauctn-pm-tfstate"
   #   key          = "prod/terraform.tfstate"
-  #   region       = "ap-southeast-1"
+  #   region       = "ap-southeast-2"
   #   use_lockfile = true
   # }
 }
 
 provider "aws" {
   region = var.region
-  default_tags {
-    tags = { Project = "quan-ly-du-an", ManagedBy = "terraform" }
-  }
+  # Không đặt default_tags: SCP của tổ chức chặn apigateway:POST trên /tags nên CreateApi kèm tag bị 403.
 }
