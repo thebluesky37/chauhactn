@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { api } from "../lib/api";
 import { ErrorBox } from "../components/ui";
@@ -7,6 +7,7 @@ import { ErrorBox } from "../components/ui";
 export default function Download() {
   const [params] = useSearchParams();
   const [error, setError] = useState<unknown>(null);
+  const started = useRef(false); // StrictMode chạy effect 2 lần ở dev -> tránh gọi/tải 2 lần
 
   useEffect(() => {
     const p = params.get("p");
@@ -15,6 +16,8 @@ export default function Download() {
       setError(new Error("Đường dẫn tải file không hợp lệ"));
       return;
     }
+    if (started.current) return;
+    started.current = true;
     api<{ url: string }>(`/admin/projects/${p}/files/download?key=${encodeURIComponent(k)}`)
       .then((r) => window.location.replace(r.url))
       .catch(setError);
