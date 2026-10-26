@@ -6,6 +6,7 @@ import ProjectPage from "./pages/ProjectPage";
 import Login from "./pages/Login";
 import AdminProjects from "./pages/AdminProjects";
 import Download from "./pages/Download";
+import ScopeCatalog from "./pages/ScopeCatalog";
 
 function Layout() {
   const nav = useNavigate();
@@ -24,6 +25,7 @@ function Layout() {
             {admin ? (
               <>
                 <Link to="/admin" className="btn-ghost">Quản trị</Link>
+                <Link to="/admin/scopes" className="btn-ghost">Danh mục scope</Link>
                 <button
                   className="btn-ghost"
                   aria-label="Đăng xuất"
@@ -65,6 +67,7 @@ export default function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/admin" element={<RequireAdmin><AdminProjects /></RequireAdmin>} />
         <Route path="/admin/projects/:id" element={<RequireAdmin><ProjectPage admin /></RequireAdmin>} />
+        <Route path="/admin/scopes" element={<RequireAdmin><ScopeCatalog /></RequireAdmin>} />
         <Route path="/download" element={<RequireAdmin><Download /></RequireAdmin>} />
         <Route path="*" element={<p className="py-20 text-center text-slate-500">Không tìm thấy trang.</p>} />
       </Route>

@@ -6,7 +6,8 @@ from datetime import datetime, timedelta, timezone
 
 from common import db
 from common.http import HttpError, Router, parse_body, response
-from common.scopes import SCOPE_PARTY_TYPES, SCOPES
+from common import scopes
+from common.scopes import SCOPE_PARTY_TYPES
 
 router = Router("/admin")
 
@@ -55,15 +56,16 @@ def _require(data, *fields):
         raise HttpError(400, "Thiếu trường bắt buộc: " + ", ".join(missing))
 
 
-def _clean_scopes(party_type, scope_ids):
-    """Kiểm tra scope hợp lệ; Kiến trúc không có scope. Trả danh sách theo thứ tự danh mục, không trùng."""
+def _clean_scopes(party_type, scope_ids, catalog):
+    """Kiểm tra scope hợp lệ theo danh mục hiện tại; Kiến trúc không có scope. Trả theo thứ tự danh mục, không trùng."""
     if party_type not in SCOPE_PARTY_TYPES:
         return []
+    order = scopes.scope_ids(catalog)
     wanted = set(scope_ids or [])
-    unknown = wanted - set(SCOPES)
+    unknown = wanted - set(order)
     if unknown:
         raise HttpError(400, "Scope không hợp lệ: " + ", ".join(sorted(unknown)))
-    return [sid for sid in SCOPES if sid in wanted]
+    return [sid for sid in order if sid in wanted]
 
 
 def _clean_scope_notes(scope_ids, notes):
@@ -185,6 +187,46 @@ def set_note(event, project_id):
     return response(200, {"createdAt": now})
 
 
+# ---------- Danh mục scope công việc (dùng chung mọi dự án) ----------
+
+@router.route("GET", "/scopes")
+def get_scopes(event):
+    _require_admin(event)
+    return response(200, {"groups": db.get_scope_catalog()})
+
+
+@router.route("PUT", "/scopes")
+def put_scopes(event):
+    """Lưu danh mục. Scope bị xóa sẽ được gỡ khỏi mọi bên (mọi dự án) đang dùng."""
+    _require_admin(event)
+    data = parse_body(event)
+    try:
+        groups = scopes.normalize(data.get("groups"))
+    except ValueError as e:
+        raise HttpError(400, str(e))
+    removed = set(scopes.scope_ids(db.get_scope_catalog())) - set(scopes.scope_ids(groups))
+    affected = 0
+    if removed:
+        resp = db.table().scan(FilterExpression="begins_with(SK, :p)", ExpressionAttributeValues={":p": "PARTY#"})
+        items = list(resp["Items"])
+        while "LastEvaluatedKey" in resp:
+            resp = db.table().scan(
+                FilterExpression="begins_with(SK, :p)", ExpressionAttributeValues={":p": "PARTY#"},
+                ExclusiveStartKey=resp["LastEvaluatedKey"],
+            )
+            items.extend(resp["Items"])
+        for it in items:
+            ids = it.get("scopeIds", [])
+            if removed & set(ids):
+                it["scopeIds"] = [i for i in ids if i not in removed]
+                it["scopeNotes"] = {k: v for k, v in it.get("scopeNotes", {}).items() if k not in removed}
+                db.table().put_item(Item=it)
+                affected += 1
+    db.put_scope_catalog(groups)
+    _audit(event, "scopes.update", {"removed": len(removed), "affectedParties": affected})
+    return response(200, {"groups": groups, "affectedParties": affected})
+
+
 # ---------- Các bên và hạng mục ----------
 
 @router.route("POST", "/projects/{project_id}/parties")
@@ -205,7 +247,7 @@ def add_party(event, project_id):
         "contactName": data.get("contactName", ""),
         "phone": data.get("phone", ""),
         "email": data.get("email", ""),
-        "scopeIds": _clean_scopes(data["type"], data.get("scopeIds")),
+        "scopeIds": _clean_scopes(data["type"], data.get("scopeIds"), db.get_scope_catalog()),
     }
     item["scopeNotes"] = _clean_scope_notes(item["scopeIds"], data.get("scopeNotes"))
     db.table().put_item(Item=item)
@@ -227,7 +269,7 @@ def update_party(event, project_id, party_id):
     if not item.get("name"):
         raise HttpError(400, "Tên không được để trống")
     if "scopeIds" in data:
-        item["scopeIds"] = _clean_scopes(item["type"], data["scopeIds"])
+        item["scopeIds"] = _clean_scopes(item["type"], data["scopeIds"], db.get_scope_catalog())
     if "scopeIds" in data or "scopeNotes" in data:
         item["scopeNotes"] = _clean_scope_notes(
             item.get("scopeIds", []), data.get("scopeNotes", item.get("scopeNotes"))
@@ -458,7 +500,7 @@ def export_project(event, project_id):
             raise HttpError(400, "Loại bên không hợp lệ")
 
     view = db.project_view(project_id)
-    body = build_workbook(view, link_base=os.environ.get("WEB_BASE_URL"), party_types=party_types)
+    body = build_workbook(view, link_base=os.environ.get("WEB_BASE_URL"), party_types=party_types, catalog=db.get_scope_catalog())
     filename = export_filename(view["project"]["name"], datetime.now(VN))
     key = f"exports/{project_id}/{db.new_id()}.xlsx"
     db.s3().put_object(

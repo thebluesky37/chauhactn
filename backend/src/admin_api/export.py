@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 
 import xlsxwriter
 
-from common.scopes import SCOPE_GROUPS, SCOPE_PARTY_TYPES
+from common.scopes import SCOPE_PARTY_TYPES, default_catalog, roman
 
 VN = timezone(timedelta(hours=7))
 
@@ -54,7 +54,7 @@ def export_filename(project_name, now):
     return f"{safe}_{now.strftime('%Y-%m-%d')}.xlsx"
 
 
-def build_workbook(view, now=None, link_base=None, party_types=None):
+def build_workbook(view, now=None, link_base=None, party_types=None, catalog=None):
     """view: kết quả db.project_view (đã gồm cả bản ghi ẩn). Trả về bytes của file .xlsx.
 
     party_types: danh sách loại bên cần xuất (None = tất cả); lọc các bên, hạng mục và lịch sử đăng tải.
@@ -62,6 +62,7 @@ def build_workbook(view, now=None, link_base=None, party_types=None):
     mở trang /download (yêu cầu Admin đăng nhập) rồi tải file. Link không hết hạn như presigned URL.
     """
     now = now or datetime.now(VN).replace(tzinfo=None)
+    catalog = catalog if catalog is not None else default_catalog()
     types = [t for t in PARTY if party_types is None or t in party_types]
     p = view["project"]
     parties = sorted((x for x in view["parties"] if x["type"] in types), key=lambda x: (list(PARTY).index(x["type"]), x["name"]))
@@ -213,14 +214,14 @@ def build_workbook(view, now=None, link_base=None, party_types=None):
         for j, x in enumerate(scope_parties):
             ws.write(row, 3 + j, f"{x['name']}\n({PARTY[x['type']]})", hdr)
         row += 1
-        for code, title, items in SCOPE_GROUPS:
-            ws.merge_range(row, 1, row, 2, f"{code}. {title}", grp)
+        for gi, g in enumerate(catalog, 1):
+            ws.merge_range(row, 1, row, 2, f"{roman(gi)}. {g['title']}", grp)
             for j in range(len(scope_parties)):
                 ws.write_blank(row, 3 + j, None, grp)
             row += 1
-            for i, name in enumerate(items, 1):
-                sid = f"{code}.{i}"
-                ws.merge_range(row, 1, row, 2, f"{i}. {name}", cell_left)
+            for i, it in enumerate(g["items"], 1):
+                sid = it["id"]
+                ws.merge_range(row, 1, row, 2, f"{i}. {it['name']}", cell_left)
                 for j, x in enumerate(scope_parties):
                     ws.write(row, 3 + j, "X" if sid in x.get("scopeIds", []) else "", cell_x)
                 row += 1

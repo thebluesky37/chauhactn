@@ -4,7 +4,7 @@ import { post, uploadFile, type Party, type PartyType, type Task } from "../lib/
 import { PARTY_LABEL } from "../lib/format";
 import { ErrorBox, Field } from "../components/ui";
 import { api, patch } from "../lib/api";
-import { SCOPE_GROUPS, SCOPE_PARTY_TYPES } from "../lib/scopes";
+import { roman, SCOPE_PARTY_TYPES, useScopeCatalog } from "../lib/scopes";
 
 export function NoteForm({ projectId, initial, onDone }: { projectId: string; initial: string; onDone: () => void }) {
   const [text, setText] = useState(initial);
@@ -26,6 +26,7 @@ export function NoteForm({ projectId, initial, onDone }: { projectId: string; in
 export function ScopePicker({
   value, notes, onChange,
 }: { value: string[]; notes: Record<string, string>; onChange: (v: string[], notes: Record<string, string>) => void }) {
+  const { data: groups, isLoading, error } = useScopeCatalog();
   const set = new Set(value);
   const toggleGroup = (ids: string[], on: boolean) => {
     const next = new Set(set);
@@ -38,11 +39,13 @@ export function ScopePicker({
   return (
     <fieldset className="space-y-3">
       <legend className="label">Scope công việc (không bắt buộc)</legend>
-      {SCOPE_GROUPS.map((g) => {
-        const ids = g.items.map((i) => i.id);
+      {isLoading && <p className="text-sm text-slate-400">Đang tải danh mục scope…</p>}
+      {error ? <ErrorBox error={error} /> : null}
+      {(groups ?? []).map((g, gi) => {
+        const ids = g.items.map((i) => i.id!);
         const count = ids.filter((i) => set.has(i)).length;
         return (
-          <div key={g.code} className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
+          <div key={g.id} className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
             <label className="flex items-center gap-2 text-sm font-semibold">
               <input
                 type="checkbox"
@@ -51,21 +54,21 @@ export function ScopePicker({
                 ref={(el) => { if (el) el.indeterminate = count > 0 && count < ids.length; }}
                 onChange={(e) => toggleGroup(ids, e.target.checked)}
               />
-              {g.code}. {g.title}
+              {roman(gi + 1)}. {g.title}
             </label>
             <div className="mt-2 grid gap-2 pl-7 sm:grid-cols-2">
               {g.items.map((i) => (
-                <div key={i.id} className={set.has(i.id) ? "sm:col-span-2" : ""}>
+                <div key={i.id} className={set.has(i.id!) ? "sm:col-span-2" : ""}>
                   <label className="flex items-center gap-2 text-sm">
-                    <input type="checkbox" className="h-5 w-5 accent-brand-600" checked={set.has(i.id)} onChange={(e) => toggleItem(i.id, e.target.checked)} />
+                    <input type="checkbox" className="h-5 w-5 accent-brand-600" checked={set.has(i.id!)} onChange={(e) => toggleItem(i.id!, e.target.checked)} />
                     {i.name}
                   </label>
-                  {set.has(i.id) && (
+                  {set.has(i.id!) && (
                     <textarea
                       className="input mt-1 min-h-[44px] py-2 text-sm"
                       placeholder="Ghi chú cho scope này (không bắt buộc)"
-                      value={notes[i.id] ?? ""}
-                      onChange={(e) => setNote(i.id, e.target.value)}
+                      value={notes[i.id!] ?? ""}
+                      onChange={(e) => setNote(i.id!, e.target.value)}
                     />
                   )}
                 </div>

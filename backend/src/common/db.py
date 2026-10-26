@@ -151,3 +151,17 @@ def delete_project_data(project_id):
             batch.delete_item(Key=k)
     table().delete_item(Key={"PK": pk, "SK": "META"})
     return {"files": files, "records": len(keys) + 1}
+
+
+SCOPE_KEY = {"PK": "CONFIG#scopes", "SK": "CATALOG"}
+
+
+def get_scope_catalog():
+    from common.scopes import default_catalog
+
+    item = table().get_item(Key=SCOPE_KEY).get("Item")
+    return item["groups"] if item else default_catalog()
+
+
+def put_scope_catalog(groups):
+    table().put_item(Item={**SCOPE_KEY, "groups": groups, "updatedAt": now_iso()})

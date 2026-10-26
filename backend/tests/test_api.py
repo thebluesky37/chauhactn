@@ -294,3 +294,38 @@ def test_delete_party(aws):
     assert code == 404
     code, _ = call(admin, event("DELETE", f"{base}/{free['id']}", groups="[]"))
     assert code in (403, 404)
+
+
+def test_scope_catalog_editable(aws):
+    from admin_api import handler as admin
+
+    code, cat = call(admin, event("GET", "/admin/scopes"))
+    assert code == 200 and cat["groups"][0]["items"][0]["id"] == "I.1"  # chưa lưu thì dùng danh mục mặc định
+
+    _, p = call(admin, event("POST", "/admin/projects", {"name": "P", "startDate": "2026-01-01", "plannedEndDate": "2026-12-31"}))
+    base = f"/admin/projects/{p['id']}/parties"
+    _, sub = call(admin, event("POST", base, {"type": "subcontractor", "name": "Thầu", "scopeIds": ["I.1", "II.1"], "scopeNotes": {"I.1": "a", "II.1": "b"}}))
+
+    groups = cat["groups"]
+    groups[0]["items"] = groups[0]["items"][1:]  # xóa I.1
+    groups[0]["items"].append({"name": "  Scope mới  "})
+    groups.append({"title": "Nhóm mới", "items": [{"name": "Mục 1"}]})
+    code, saved = call(admin, event("PUT", "/admin/scopes", {"groups": groups}))
+    assert code == 200 and saved["affectedParties"] == 1
+    new_id = saved["groups"][0]["items"][-1]["id"]
+    assert saved["groups"][0]["items"][-1]["name"] == "Scope mới" and new_id not in ("I.1", "")
+    assert saved["groups"][-1]["id"].startswith("g")
+
+    _, view = call(admin, event("GET", f"/admin/projects/{p['id']}"))
+    party = view["parties"][0]
+    assert party["scopeIds"] == ["II.1"] and party["scopeNotes"] == {"II.1": "b"}  # scope bị xóa được gỡ khỏi bên
+
+    code, _ = call(admin, event("PATCH", f"{base}/{sub['id']}", {"scopeIds": [new_id]}))
+    assert code == 200  # scope mới chọn được
+    code, _ = call(admin, event("PATCH", f"{base}/{sub['id']}", {"scopeIds": ["I.1"]}))
+    assert code == 400  # scope đã xóa không còn hợp lệ
+
+    assert call(admin, event("PUT", "/admin/scopes", {"groups": [{"title": " ", "items": []}]}))[0] == 400
+    assert call(admin, event("PUT", "/admin/scopes", {"groups": [{"title": "A", "items": [{"name": ""}]}]}))[0] == 400
+    assert call(admin, event("PUT", "/admin/scopes", {"groups": "x"}))[0] == 400
+    assert call(admin, event("GET", "/admin/scopes", groups="[]"))[0] == 403
