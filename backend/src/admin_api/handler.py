@@ -272,7 +272,7 @@ def create_upload_record(event, project_id):
     _require_admin(event)
     _project_or_404(project_id)
     data = parse_body(event)
-    _require(data, "partyType", "partyId", "sentDate", "files")
+    _require(data, "partyType", "partyId", "sentDate")
     if data["partyType"] not in PARTY_TYPES:
         raise HttpError(400, "Loại bên không hợp lệ")
     if data["partyType"] == "subcontractor" and not data.get("taskId"):
@@ -282,7 +282,7 @@ def create_upload_record(event, project_id):
 
     existing = db.query_all(f"PROJECT#{project_id}", "UPLOAD#")
     files = []
-    for f in data["files"]:
+    for f in data.get("files") or []:
         if not f["key"].startswith(f"projects/{project_id}/"):
             raise HttpError(400, "Khóa file không thuộc dự án")
         head = db.s3().head_object(Bucket=db.bucket(), Key=f["key"])  # lỗi nếu file chưa có trên S3

@@ -198,8 +198,8 @@ function UploadRow({
           Gửi {fmtDate(u.sentDate)} · đăng {fmtDateTime(u.createdAt)}
         </p>
       </div>
-      {u.description && <p className="mt-2 text-sm">{u.description}</p>}
-      {u.adminNote && <p className="mt-1 text-sm text-slate-500">Ghi chú: {u.adminNote}</p>}
+      {u.description && <p className="mt-2 whitespace-pre-wrap text-sm">{u.description}</p>}
+      {u.adminNote && <p className="mt-1 whitespace-pre-wrap text-sm text-slate-500">Ghi chú: {u.adminNote}</p>}
       <ul className="mt-3 space-y-2">
         {u.files.map((f) => (
           <li key={(f.key ?? f.name) + f.version} className="flex items-center justify-between gap-2 rounded-lg bg-slate-50 px-3 py-2 text-sm dark:bg-slate-800">

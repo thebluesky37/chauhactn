@@ -159,11 +159,11 @@ export function UploadForm({ projectId, parties, tasks, onDone }: { projectId: s
         <Field label="Kỳ báo cáo từ"><input className="input" type="date" value={periodFrom} onChange={(e) => setFrom(e.target.value)} /></Field>
         <Field label="đến"><input className="input" type="date" min={periodFrom} value={periodTo} onChange={(e) => setTo(e.target.value)} /></Field>
       </div>
-      <div className="sm:col-span-2"><Field label="Mô tả / nội dung cập nhật"><input className="input" value={description} onChange={(e) => setDesc(e.target.value)} /></Field></div>
-      <div className="sm:col-span-2"><Field label="Ghi chú thêm (không bắt buộc)"><input className="input" value={adminNote} onChange={(e) => setNote(e.target.value)} /></Field></div>
+      <div className="sm:col-span-2"><Field label="Mô tả / nội dung cập nhật"><textarea className="input min-h-[96px] py-2" value={description} onChange={(e) => setDesc(e.target.value)} /></Field></div>
+      <div className="sm:col-span-2"><Field label="Ghi chú thêm (không bắt buộc)"><textarea className="input min-h-[72px] py-2" value={adminNote} onChange={(e) => setNote(e.target.value)} /></Field></div>
       <div className="sm:col-span-2">
-        <Field label="Chọn file (xls, xlsx, csv, doc, docx, pdf, dwg, dxf, rvt, rfa, jpg, png)">
-          <input className="input py-2" type="file" multiple required onChange={(e) => setFiles(Array.from(e.target.files ?? []))} />
+        <Field label="Chọn file (không bắt buộc; xls, xlsx, csv, doc, docx, pdf, dwg, dxf, rvt, rfa, jpg, png)">
+          <input className="input py-2" type="file" multiple onChange={(e) => setFiles(Array.from(e.target.files ?? []))} />
         </Field>
         {files.map((f) => (
           <div key={f.name} className="mt-2 text-sm">

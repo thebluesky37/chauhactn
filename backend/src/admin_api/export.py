@@ -231,8 +231,9 @@ def build_workbook(view, now=None, link_base=None):
         recipients = ", ".join(party_by_id[r]["name"] for r in u.get("recipientIds", []) if r in party_by_id)
         pf, pt = _date(u.get("periodFrom")), _date(u.get("periodTo"))
         period = f"{_fmt_d(pf)} – {_fmt_d(pt)}" if pf and pt else (_fmt_d(pf or pt))
-        for fl in u.get("files", []):
-            ext = fl["name"].rsplit(".", 1)[-1].upper() if "." in fl["name"] else ""
+        # lần cập nhật không kèm file vẫn hiện một dòng
+        for fl in u.get("files") or [None]:
+            ext = fl["name"].rsplit(".", 1)[-1].upper() if fl and "." in fl["name"] else ""
             up_rows.append([
                 PARTY.get(u["partyType"], u["partyType"]),
                 party.get("name", "—"),
@@ -242,14 +243,14 @@ def build_workbook(view, now=None, link_base=None):
                 recipients,
                 u.get("description", ""),
                 u.get("adminNote", ""),
-                fl["name"],
+                fl["name"] if fl else "",
                 ext,
-                fl["size"] / 1048576,
-                fl.get("version", 1),
+                fl["size"] / 1048576 if fl else None,
+                fl.get("version", 1) if fl else None,
                 _dt_vn(u["createdAt"]),
                 "Đã ẩn" if u.get("hidden") else "Hiện",
             ])
-            up_keys.append(fl.get("key"))
+            up_keys.append(fl.get("key") if fl else None)
     first = table(
         [("Loại bên", t_text), ("Tên bên", t_text), ("Hạng mục", t_text), ("Ngày gửi", t_date), ("Kỳ báo cáo", t_center),
          ("Bên nhận", t_text), ("Mô tả", t_text), ("Ghi chú Admin", t_text), ("Tên file", t_text), ("Loại", t_center),
