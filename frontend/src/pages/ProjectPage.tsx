@@ -1,11 +1,12 @@
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Download, EyeOff, FileSpreadsheet, FileText } from "lucide-react";
-import { api, patch, type PartyType, type ProjectView, type UploadRecord } from "../lib/api";
+import { api, patch, type Party, type PartyType, type ProjectView, type UploadRecord } from "../lib/api";
 import { fmtDate, fmtDateTime, fmtSize, PARTY_LABEL } from "../lib/format";
 import { Empty, ErrorBox, Skeleton, StatusBadge } from "../components/ui";
 import { DeleteProject } from "../components/DeleteProject";
+import { roman, useScopeCatalog } from "../lib/scopes";
 import { AddPartyForm, AddTaskForm, EditPartyForm, NoteForm, UploadForm } from "./AdminPanels";
 
 const EXPORT_PRESETS: { label: string; types: PartyType[] }[] = [
@@ -13,11 +14,14 @@ const EXPORT_PRESETS: { label: string; types: PartyType[] }[] = [
   { label: "Chủ đầu tư + Tổng thầu MEP", types: ["investor", "coordinator"] },
 ];
 
-const TABS = ["Tổng quan", "Các bên", "Hạng mục", "Lịch sử cập nhật"] as const;
+const ORDER: PartyType[] = ["investor", "architect", "coordinator", "subcontractor"];
+
+const ALL_TABS = ["Tổng quan", "Các bên", "Ma trận scope", "Hạng mục", "Lịch sử cập nhật"] as const;
 
 export default function ProjectPage({ admin = false }: { admin?: boolean }) {
   const { id = "" } = useParams();
-  const [tab, setTab] = useState<(typeof TABS)[number]>("Tổng quan");
+  const [tab, setTab] = useState<(typeof ALL_TABS)[number]>("Tổng quan");
+  const TABS = admin ? ALL_TABS : ALL_TABS.filter((t) => t !== "Ma trận scope"); // ma trận chỉ dành cho admin
   const prefix = admin ? "/admin" : "/public";
   const key = ["project", admin, id];
   const qc = useQueryClient();
@@ -174,6 +178,13 @@ export default function ProjectPage({ admin = false }: { admin?: boolean }) {
         </section>
       )}
 
+      {admin && tab === "Ma trận scope" && (
+        <section className="space-y-3">
+          <p className="text-sm text-slate-500">X: bên được giao scope. Bấm hàng nhóm để thu gọn. Sửa scope ở tab “Các bên”.</p>
+          {parties.length === 0 ? <Empty title="Chưa có bên tham gia" /> : <ScopeMatrix parties={parties} />}
+        </section>
+      )}
+
       {tab === "Hạng mục" && (
         <section className="space-y-4">
           {tasks.length === 0 ? (
@@ -224,6 +235,82 @@ export default function ProjectPage({ admin = false }: { admin?: boolean }) {
           })}
         </section>
       )}
+    </div>
+  );
+}
+
+function ScopeMatrix({ parties }: { parties: Party[] }) {
+  const { data: catalog = [], isLoading, error } = useScopeCatalog();
+  const cols = [...parties].sort((a, b) => ORDER.indexOf(a.type) - ORDER.indexOf(b.type) || a.name.localeCompare(b.name));
+  const has = (p: Party, sid: string) => (p.scopeIds ?? []).includes(sid);
+  const cell = "border border-slate-200 px-3 py-2 dark:border-slate-800";
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const toggle = (code: string) =>
+    setCollapsed((s) => {
+      const n = new Set(s);
+      if (!n.delete(code)) n.add(code);
+      return n;
+    });
+  const allCollapsed = collapsed.size === catalog.length;
+  if (isLoading) return <Skeleton className="h-40" />;
+  if (error) return <ErrorBox error={error} />;
+  return (
+    <div className="card overflow-x-auto">
+      <table className="w-full min-w-[640px] border-collapse text-sm">
+        <thead>
+          <tr className="bg-brand-600 text-white">
+            <th className={`${cell} text-left`}>
+              <button type="button" className="text-left font-semibold" onClick={() => setCollapsed(allCollapsed ? new Set() : new Set(catalog.map((g) => g.id!)))}>
+                Scope công việc <span className="text-xs font-normal opacity-80">({allCollapsed ? "mở hết" : "thu gọn hết"})</span>
+              </button>
+            </th>
+            {cols.map((p) => (
+              <th key={p.id} className={`${cell} min-w-[140px] text-center font-semibold`}>
+                <div>{p.name}</div>
+                <div className="text-xs font-normal opacity-80">{PARTY_LABEL[p.type]}</div>
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {catalog.map((g, gi) => (
+            <Fragment key={g.id}>
+              <tr className="cursor-pointer bg-brand-50 font-semibold dark:bg-slate-800" onClick={() => toggle(g.id!)}>
+                <td className={cell}>
+                  <span className="mr-2 inline-block w-3 text-xs">{collapsed.has(g.id!) ? "▶" : "▼"}</span>
+                  {roman(gi + 1)}. {g.title}
+                </td>
+                {cols.map((p) => {
+                  const n = g.items.filter((i) => has(p, i.id!)).length;
+                  // khi thu gọn: hiện số scope con đã chọn; mở ra thì để trống
+                  return <td key={p.id} className={`${cell} text-center text-xs font-normal text-slate-500`}>{collapsed.has(g.id!) && n > 0 ? `${n}/${g.items.length}` : ""}</td>;
+                })}
+              </tr>
+              {!collapsed.has(g.id!) && g.items.map((i, n) => {
+                const withNote = cols.filter((p) => p.scopeNotes?.[i.id!]);
+                return (
+                  <Fragment key={i.id}>
+                    <tr>
+                      <td className={`${cell} pl-6`}>{n + 1}. {i.name}</td>
+                      {cols.map((p) => (
+                        <td key={p.id} className={`${cell} text-center font-bold text-brand-600`}>{has(p, i.id!) ? "X" : ""}</td>
+                      ))}
+                    </tr>
+                    {withNote.length > 0 && (
+                      <tr className="text-xs italic text-slate-500">
+                        <td className={`${cell} pl-10`}>Ghi chú</td>
+                        {cols.map((p) => (
+                          <td key={p.id} className={`${cell} whitespace-pre-wrap`}>{p.scopeNotes?.[i.id!] ?? ""}</td>
+                        ))}
+                      </tr>
+                    )}
+                  </Fragment>
+                );
+              })}
+            </Fragment>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
