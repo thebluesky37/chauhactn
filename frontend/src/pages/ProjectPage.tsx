@@ -2,7 +2,7 @@ import { Fragment, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { ArrowLeft, FileSpreadsheet, Pencil } from "lucide-react";
-import { api, type Party, type PartyType, type ProjectView } from "../lib/api";
+import { api, type Party, type PartyType, type ProjectView, type UploadRecord } from "../lib/api";
 import { fmtDate, fmtDateTime, PARTY_LABEL } from "../lib/format";
 import { Empty, ErrorBox, Skeleton, StatusBadge } from "../components/ui";
 import { UploadRow } from "../components/UploadRow";
@@ -170,31 +170,7 @@ export default function ProjectPage({ admin = false }: { admin?: boolean }) {
       )}
 
       {tab === "Lịch sử cập nhật" && (
-        <section className="space-y-4">
-          {uploads.length === 0 && <Empty title="Chưa có cập nhật" />}
-          {(Object.keys(PARTY_LABEL) as PartyType[]).map((t) => {
-            const list = uploads.filter((u) => u.partyType === t);
-            return (
-              <div key={t} className="space-y-3">
-                <h3 className="font-semibold">Lịch sử đăng tải của {PARTY_LABEL[t]} ({list.length})</h3>
-                {list.length === 0 ? (
-                  <p className="text-sm text-slate-400">Chưa có cập nhật.</p>
-                ) : (
-                  list.map((u) => (
-                    <UploadRow
-                      key={u.id}
-                      u={u}
-                      admin={admin}
-                      projectId={id}
-                      partyName={partyName(u.partyId)}
-                      taskName={taskName(u.taskId)}
-                    />
-                  ))
-                )}
-              </div>
-            );
-          })}
-        </section>
+        <Timeline uploads={uploads} admin={admin} projectId={id} partyName={partyName} taskName={taskName} />
       )}
     </div>
   );
@@ -273,6 +249,78 @@ function ScopeMatrix({ parties, admin }: { parties: Party[]; admin: boolean }) {
         </tbody>
       </table>
     </div>
+  );
+}
+
+const TYPE_DOT: Record<PartyType, string> = {
+  investor: "bg-blue-600",
+  architect: "bg-violet-600",
+  coordinator: "bg-amber-500",
+  subcontractor: "bg-emerald-600",
+};
+
+// Dòng thời gian theo ngày bên đó gửi, mới nhất ở trên; gom theo tháng, lọc theo loại bên.
+function Timeline({
+  uploads, admin, projectId, partyName, taskName,
+}: {
+  uploads: UploadRecord[]; admin: boolean; projectId: string; partyName: (id: string) => string; taskName: (id?: string | null) => string | undefined;
+}) {
+  const [filter, setFilter] = useState<PartyType | "all">("all");
+  if (uploads.length === 0) return <Empty title="Chưa có cập nhật" />;
+  const sorted = [...uploads].sort((a, b) => b.sentDate.localeCompare(a.sentDate) || b.createdAt.localeCompare(a.createdAt));
+  const shown = sorted.filter((u) => filter === "all" || u.partyType === filter);
+  const months: { key: string; items: UploadRecord[] }[] = [];
+  for (const u of shown) {
+    const key = u.sentDate.slice(0, 7);
+    const last = months[months.length - 1];
+    if (last && last.key === key) last.items.push(u);
+    else months.push({ key, items: [u] });
+  }
+  const chips: { v: PartyType | "all"; label: string; n: number }[] = [
+    { v: "all", label: "Tất cả", n: uploads.length },
+    ...(Object.keys(PARTY_LABEL) as PartyType[]).map((t) => ({ v: t, label: PARTY_LABEL[t], n: uploads.filter((u) => u.partyType === t).length })),
+  ];
+
+  return (
+    <section className="space-y-5">
+      <div className="flex flex-wrap gap-2">
+        {chips.map((c) => (
+          <button
+            key={c.v}
+            onClick={() => setFilter(c.v)}
+            aria-pressed={filter === c.v}
+            className={`rounded-full border px-3 py-1 text-sm font-medium ${
+              filter === c.v ? "border-brand-600 bg-brand-600 text-white" : "border-slate-300 text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+            }`}
+          >
+            {c.v !== "all" && <span className={`mr-1.5 inline-block h-2 w-2 rounded-full ${TYPE_DOT[c.v]}`} />}
+            {c.label} ({c.n})
+          </button>
+        ))}
+      </div>
+
+      {shown.length === 0 && <Empty title="Không có cập nhật nào của bên này" />}
+
+      {months.map((m) => (
+        <div key={m.key}>
+          <h3 className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-500">
+            Tháng {Number(m.key.slice(5))}/{m.key.slice(0, 4)}
+          </h3>
+          <ol className="relative ml-3 space-y-5 border-l-2 border-slate-200 pl-6 dark:border-slate-700">
+            {m.items.map((u) => (
+              <li key={u.id} className="relative">
+                <span
+                  className={`absolute -left-[33px] top-5 h-4 w-4 rounded-full ring-4 ring-white dark:ring-slate-900 ${TYPE_DOT[u.partyType]}`}
+                  aria-hidden
+                />
+                <p className="mb-1 text-sm font-semibold text-slate-600 dark:text-slate-300">{fmtDate(u.sentDate)}</p>
+                <UploadRow u={u} admin={admin} projectId={projectId} partyName={partyName(u.partyId)} taskName={taskName(u.taskId)} />
+              </li>
+            ))}
+          </ol>
+        </div>
+      ))}
+    </section>
   );
 }
 
