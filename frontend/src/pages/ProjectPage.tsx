@@ -133,6 +133,7 @@ export default function ProjectPage({ admin = false }: { admin?: boolean }) {
 
       {tab === "Tổng quan" && (
         <section className="space-y-4">
+          <Overview data={data} />
           <div className="card p-5">
             <h2 className="font-semibold">Ghi chú</h2>
             <p className="mt-2 whitespace-pre-wrap text-sm text-slate-600 dark:text-slate-300">
@@ -312,6 +313,135 @@ function ScopeMatrix({ parties }: { parties: Party[] }) {
         </tbody>
       </table>
     </div>
+  );
+}
+
+const DAY = 86_400_000;
+const toDay = (iso: string) => new Date(iso.slice(0, 10) + "T00:00:00").getTime();
+
+function Overview({ data }: { data: ProjectView }) {
+  const { project: p, parties, tasks, uploads } = data;
+  const live = uploads.filter((u) => !u.hidden);
+  const files = live.reduce((n, u) => n + u.files.length, 0);
+  const latest = live[0]; // đã sắp mới nhất trước
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const start = toDay(p.startDate);
+  const end = toDay(p.plannedEndDate);
+  const total = Math.max(1, Math.round((end - start) / DAY));
+  const elapsed = Math.min(total, Math.max(0, Math.round((today - start) / DAY)));
+  const pct = Math.round((elapsed / total) * 100);
+  const daysLeft = Math.round((end - today) / DAY);
+  const timeNote =
+    p.status === "done" ? "Đã hoàn thành"
+    : today < start ? `Chưa bắt đầu (còn ${Math.round((start - today) / DAY)} ngày)`
+    : daysLeft >= 0 ? `Còn ${daysLeft} ngày đến hạn dự kiến`
+    : `Quá hạn dự kiến ${-daysLeft} ngày`;
+  const overdue = p.status !== "done" && daysLeft < 0;
+
+  const byType = (Object.keys(PARTY_LABEL) as PartyType[]).map((t) => ({ t, list: parties.filter((x) => x.type === t) }));
+  const taskState = (t: { startDate: string; endDate: string }) =>
+    today < toDay(t.startDate) ? "Chưa bắt đầu" : today > toDay(t.endDate) ? "Quá hạn" : "Đang thực hiện";
+  const partyName = (id: string) => parties.find((x) => x.id === id)?.name ?? "—";
+  const recent = live.slice(0, 5);
+  const kpis: [string | number, string][] = [
+    [parties.length, "Bên tham gia"],
+    [tasks.length, "Hạng mục"],
+    [live.length, "Lần đăng tải"],
+    [files, "File đã đăng"],
+    [latest ? fmtDate(latest.createdAt) : "—", "Cập nhật gần nhất"],
+  ];
+
+  return (
+    <>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+        {kpis.map(([v, label]) => (
+          <div key={label} className="card p-4 text-center">
+            <p className="text-2xl font-bold text-brand-600">{v}</p>
+            <p className="mt-1 text-xs text-slate-500">{label}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="card space-y-3 p-5">
+        <h2 className="font-semibold">Thông tin dự án</h2>
+        <dl className="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
+          <div className="flex justify-between gap-3"><dt className="text-slate-500">Trạng thái</dt><dd><StatusBadge status={p.status} /></dd></div>
+          <div className="flex justify-between gap-3"><dt className="text-slate-500">Ngày khởi tạo</dt><dd>{fmtDate(p.startDate)}</dd></div>
+          <div className="flex justify-between gap-3"><dt className="text-slate-500">Hoàn thành dự kiến</dt><dd>{fmtDate(p.plannedEndDate)}</dd></div>
+          <div className="flex justify-between gap-3"><dt className="text-slate-500">Hoàn thành thực tế</dt><dd>{p.actualEndDate ? fmtDate(p.actualEndDate) : "Chưa hoàn thành"}</dd></div>
+        </dl>
+        <div>
+          <div className="mb-1 flex justify-between text-xs text-slate-500">
+            <span>Thời gian đã qua {pct}% ({elapsed}/{total} ngày)</span>
+            <span className={overdue ? "font-semibold text-red-600" : ""}>{timeNote}</span>
+          </div>
+          <div className="h-2 overflow-hidden rounded bg-slate-200 dark:bg-slate-800">
+            <div className={`h-full ${overdue ? "bg-red-500" : "bg-brand-600"}`} style={{ width: `${pct}%` }} />
+          </div>
+        </div>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <div className="card p-5">
+          <h2 className="font-semibold">Các bên tham gia</h2>
+          {parties.length === 0 ? (
+            <p className="mt-2 text-sm text-slate-400">Chưa có bên tham gia.</p>
+          ) : (
+            <ul className="mt-3 space-y-2 text-sm">
+              {byType.filter((x) => x.list.length > 0).map(({ t, list }) => (
+                <li key={t}>
+                  <span className="font-medium">{PARTY_LABEL[t]} ({list.length}):</span>{" "}
+                  <span className="text-slate-600 dark:text-slate-300">{list.map((x) => x.name).join(", ")}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        <div className="card p-5">
+          <h2 className="font-semibold">Hạng mục thầu phụ</h2>
+          {tasks.length === 0 ? (
+            <p className="mt-2 text-sm text-slate-400">Chưa có hạng mục.</p>
+          ) : (
+            <ul className="mt-3 divide-y divide-slate-200 text-sm dark:divide-slate-800">
+              {tasks.map((t) => {
+                const st = taskState(t);
+                const n = live.filter((u) => u.taskId === t.id).length;
+                return (
+                  <li key={t.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
+                    <div>
+                      <p className="font-medium">{t.name}</p>
+                      <p className="text-xs text-slate-500">{partyName(t.partyId)} · {fmtDate(t.startDate)} – {fmtDate(t.endDate)} · {n} lần cập nhật</p>
+                    </div>
+                    <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${st === "Quá hạn" ? "bg-red-100 text-red-700" : st === "Đang thực hiện" ? "bg-blue-100 text-blue-700" : "bg-slate-100 text-slate-600"}`}>{st}</span>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+      </div>
+
+      <div className="card p-5">
+        <h2 className="font-semibold">Cập nhật gần đây</h2>
+        {recent.length === 0 ? (
+          <p className="mt-2 text-sm text-slate-400">Chưa có cập nhật.</p>
+        ) : (
+          <ul className="mt-3 divide-y divide-slate-200 text-sm dark:divide-slate-800">
+            {recent.map((u) => (
+              <li key={u.id} className="py-2">
+                <div className="flex flex-wrap justify-between gap-2">
+                  <p><span className="font-medium">{partyName(u.partyId)}</span> <span className="text-xs text-slate-500">({PARTY_LABEL[u.partyType]})</span></p>
+                  <p className="text-xs text-slate-500">{fmtDateTime(u.createdAt)} · {u.files.length} file</p>
+                </div>
+                {u.description && <p className="mt-0.5 line-clamp-2 whitespace-pre-wrap text-slate-600 dark:text-slate-300">{u.description}</p>}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </>
   );
 }
 
