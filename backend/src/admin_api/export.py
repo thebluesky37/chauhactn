@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 
 import xlsxwriter
 
-from common.scopes import SCOPE_GROUPS
+from common.scopes import SCOPE_GROUPS, SCOPE_PARTY_TYPES
 
 VN = timezone(timedelta(hours=7))
 
@@ -27,20 +27,6 @@ BORDER = "#CBD5E1"
 WIDTHS = {"A": 2, "B": 22, "C": 30, "D": 24, "E": 16, "F": 28, "G": 24,
           "H": 36, "I": 30, "J": 36, "K": 12, "L": 13, "M": 10, "N": 18, "O": 12, "P": 2}
 LAST_COL = 14  # cột O
-
-
-def _scope_text(scope_ids):
-    """Mỗi nhóm một dòng: "I. HỆ THỐNG ĐIỆN: Trung thế, Hạ thế". Chọn đủ nhóm thì ghi "(tất cả)"."""
-    chosen = set(scope_ids or [])
-    lines = []
-    for code, title, items in SCOPE_GROUPS:
-        ids = [f"{code}.{i}" for i in range(1, len(items) + 1)]
-        picked = [name for sid, name in zip(ids, items) if sid in chosen]
-        if not picked:
-            continue
-        detail = "(tất cả)" if len(picked) == len(items) else ", ".join(picked)
-        lines.append(f"{code}. {title}: {detail}")
-    return "\n".join(lines)
 
 
 def _date(s):
@@ -110,6 +96,11 @@ def build_workbook(view, now=None, link_base=None, party_types=None):
     note_fmt = f(text_wrap=True, valign="top", border=1, border_color=BORDER, indent=1)
     note_meta = f(italic=True, font_size=10, font_color=GRAY)
     sub_head = f(bold=True, font_size=12, font_color=NAVY)
+    grp = f(bold=True, font_color=BLUE, bg_color=LIGHT, border=1, border_color=BORDER, indent=1)
+    cell_left = f(border=1, border_color=BORDER, indent=2, text_wrap=True, valign="top")
+    cell_x = f(bold=True, font_color=BLUE, align="center", border=1, border_color=BORDER, valign="top")
+    cell_note_lbl = f(italic=True, font_color=GRAY, border=1, border_color=BORDER, indent=3, valign="top")
+    cell_note = f(italic=True, font_color=GRAY, text_wrap=True, border=1, border_color=BORDER, valign="top")
 
     link_fmt = f(font_color=BLUE, underline=1, text_wrap=True, valign="top", indent=1)
     t_text = f(text_wrap=True, valign="top", indent=1)
@@ -213,15 +204,42 @@ def build_workbook(view, now=None, link_base=None, party_types=None):
     # ----- 3. Các bên tham gia -----
     heading("3. CÁC BÊN THAM GIA")
     table(
-        [("Loại bên", t_text), ("Tên", t_text), ("Người đại diện", t_text), ("Điện thoại", t_center), ("Email", t_text),
-         ("Scope công việc", t_text)],
-        [[PARTY[x["type"]], x["name"], x.get("contactName", ""), x.get("phone", ""), x.get("email", ""),
-          _scope_text(x.get("scopeIds"))] for x in parties],
+        [("Loại bên", t_text), ("Tên", t_text), ("Người đại diện", t_text), ("Điện thoại", t_center), ("Email", t_text)],
+        [[PARTY[x["type"]], x["name"], x.get("contactName", ""), x.get("phone", ""), x.get("email", "")] for x in parties],
         "tblCacBen",
     )
 
-    # ----- 4. Hạng mục thầu phụ -----
-    heading("4. HẠNG MỤC THẦU PHỤ")
+    # ----- 4. Scope công việc (hàng = scope, cột = bên, X = được giao) -----
+    heading("4. SCOPE CÔNG VIỆC")
+    scope_parties = [x for x in parties if x["type"] in SCOPE_PARTY_TYPES]
+    if not scope_parties:
+        ws.merge_range(row, 1, row, 3, "Chưa có dữ liệu.", empty)
+        row += 1
+    else:
+        ws.set_row(row, 40)
+        ws.merge_range(row, 1, row, 2, "Scope công việc", hdr)
+        for j, x in enumerate(scope_parties):
+            ws.write(row, 3 + j, f"{x['name']}\n({PARTY[x['type']]})", hdr)
+        row += 1
+        for code, title, items in SCOPE_GROUPS:
+            ws.merge_range(row, 1, row, 2, f"{code}. {title}", grp)
+            for j in range(len(scope_parties)):
+                ws.write_blank(row, 3 + j, None, grp)
+            row += 1
+            for i, name in enumerate(items, 1):
+                sid = f"{code}.{i}"
+                ws.merge_range(row, 1, row, 2, f"{i}. {name}", cell_left)
+                for j, x in enumerate(scope_parties):
+                    ws.write(row, 3 + j, "X" if sid in x.get("scopeIds", []) else "", cell_x)
+                row += 1
+                if any(x.get("scopeNotes", {}).get(sid) for x in scope_parties):
+                    ws.merge_range(row, 1, row, 2, "Ghi chú", cell_note_lbl)
+                    for j, x in enumerate(scope_parties):
+                        ws.write(row, 3 + j, x.get("scopeNotes", {}).get(sid, ""), cell_note)
+                    row += 1
+
+    # ----- 5. Hạng mục thầu phụ -----
+    heading("5. HẠNG MỤC THẦU PHỤ")
     counts, latest = {}, {}
     for u in uploads:
         tid = u.get("taskId")
@@ -245,12 +263,12 @@ def build_workbook(view, now=None, link_base=None, party_types=None):
     )
 
     # ----- 5. Lịch sử đăng tải (mỗi bên một bảng, mỗi file một dòng) -----
-    heading("5. LỊCH SỬ ĐĂNG TẢI")
+    heading("6. LỊCH SỬ ĐĂNG TẢI")
     for n, ptype in enumerate(PARTY, 1):
         if ptype not in types:
             continue
         plabel = PARTY[ptype]
-        ws.write(row, 1, f"5.{n}. Lịch sử đăng tải của {plabel}", sub_head)
+        ws.write(row, 1, f"6.{n}. Lịch sử đăng tải của {plabel}", sub_head)
         row += 1
         up_rows, up_keys = [], []
         for u in (x for x in uploads if x["partyType"] == ptype):

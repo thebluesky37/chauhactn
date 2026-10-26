@@ -23,6 +23,7 @@ export interface Party {
   phone?: string;
   email?: string;
   scopeIds?: string[];
+  scopeNotes?: Record<string, string>;
 }
 export interface Task {
   id: string;

@@ -23,13 +23,17 @@ export function NoteForm({ projectId, initial, onDone }: { projectId: string; in
   );
 }
 
-export function ScopePicker({ value, onChange }: { value: string[]; onChange: (v: string[]) => void }) {
+export function ScopePicker({
+  value, notes, onChange,
+}: { value: string[]; notes: Record<string, string>; onChange: (v: string[], notes: Record<string, string>) => void }) {
   const set = new Set(value);
   const toggleGroup = (ids: string[], on: boolean) => {
     const next = new Set(set);
     ids.forEach((i) => (on ? next.add(i) : next.delete(i)));
-    onChange([...next]);
+    const kept = Object.fromEntries(Object.entries(notes).filter(([k]) => next.has(k))); // bỏ chọn thì mất ghi chú
+    onChange([...next], kept);
   };
+  const setNote = (id: string, text: string) => onChange(value, { ...notes, [id]: text });
   const toggleItem = (id: string, on: boolean) => toggleGroup([id], on);
   return (
     <fieldset className="space-y-3">
@@ -51,10 +55,20 @@ export function ScopePicker({ value, onChange }: { value: string[]; onChange: (v
             </label>
             <div className="mt-2 grid gap-2 pl-7 sm:grid-cols-2">
               {g.items.map((i) => (
-                <label key={i.id} className="flex items-center gap-2 text-sm">
-                  <input type="checkbox" className="h-5 w-5 accent-brand-600" checked={set.has(i.id)} onChange={(e) => toggleItem(i.id, e.target.checked)} />
-                  {i.name}
-                </label>
+                <div key={i.id} className={set.has(i.id) ? "sm:col-span-2" : ""}>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input type="checkbox" className="h-5 w-5 accent-brand-600" checked={set.has(i.id)} onChange={(e) => toggleItem(i.id, e.target.checked)} />
+                    {i.name}
+                  </label>
+                  {set.has(i.id) && (
+                    <textarea
+                      className="input mt-1 min-h-[44px] py-2 text-sm"
+                      placeholder="Ghi chú cho scope này (không bắt buộc)"
+                      value={notes[i.id] ?? ""}
+                      onChange={(e) => setNote(i.id, e.target.value)}
+                    />
+                  )}
+                </div>
               ))}
             </div>
           </div>
@@ -70,8 +84,9 @@ export function EditPartyForm({ projectId, party, onDone, onCancel }: { projectI
   const [phone, setPhone] = useState(party.phone ?? "");
   const [email, setEmail] = useState(party.email ?? "");
   const [scopeIds, setScopes] = useState<string[]>(party.scopeIds ?? []);
+  const [scopeNotes, setNotes] = useState<Record<string, string>>(party.scopeNotes ?? {});
   const m = useMutation({
-    mutationFn: () => patch(`/admin/projects/${projectId}/parties/${party.id}`, { name, contactName, phone, email, scopeIds }),
+    mutationFn: () => patch(`/admin/projects/${projectId}/parties/${party.id}`, { name, contactName, phone, email, scopeIds, scopeNotes }),
     onSuccess: onDone,
   });
   return (
@@ -81,7 +96,7 @@ export function EditPartyForm({ projectId, party, onDone, onCancel }: { projectI
       <Field label="Người đại diện"><input className="input" value={contactName} onChange={(e) => setContact(e.target.value)} /></Field>
       <Field label="Điện thoại"><input className="input" value={phone} onChange={(e) => setPhone(e.target.value)} /></Field>
       <Field label="Email"><input className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} /></Field>
-      {SCOPE_PARTY_TYPES.includes(party.type) && <div className="sm:col-span-2"><ScopePicker value={scopeIds} onChange={setScopes} /></div>}
+      {SCOPE_PARTY_TYPES.includes(party.type) && <div className="sm:col-span-2"><ScopePicker value={scopeIds} notes={scopeNotes} onChange={(v, n) => { setScopes(v); setNotes(n); }} /></div>}
       {m.error ? <div className="sm:col-span-2"><ErrorBox error={m.error} /></div> : null}
       <div className="flex gap-3 sm:col-span-2">
         <button className="btn-primary" disabled={m.isPending}>Lưu</button>
@@ -98,9 +113,10 @@ export function AddPartyForm({ projectId, onDone }: { projectId: string; onDone:
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [scopeIds, setScopes] = useState<string[]>([]);
+  const [scopeNotes, setNotes] = useState<Record<string, string>>({});
   const m = useMutation({
-    mutationFn: () => post(`/admin/projects/${projectId}/parties`, { type, name, contactName, phone, email, scopeIds: SCOPE_PARTY_TYPES.includes(type) ? scopeIds : [] }),
-    onSuccess: () => { setName(""); setContact(""); setPhone(""); setEmail(""); setScopes([]); onDone(); },
+    mutationFn: () => post(`/admin/projects/${projectId}/parties`, { type, name, contactName, phone, email, scopeIds: SCOPE_PARTY_TYPES.includes(type) ? scopeIds : [], scopeNotes: SCOPE_PARTY_TYPES.includes(type) ? scopeNotes : {} }),
+    onSuccess: () => { setName(""); setContact(""); setPhone(""); setEmail(""); setScopes([]); setNotes({}); onDone(); },
   });
   return (
     <form className="card grid gap-4 p-5 sm:grid-cols-2" onSubmit={(e) => { e.preventDefault(); m.mutate(); }}>
@@ -114,7 +130,7 @@ export function AddPartyForm({ projectId, onDone }: { projectId: string; onDone:
       <Field label="Người đại diện"><input className="input" value={contactName} onChange={(e) => setContact(e.target.value)} /></Field>
       <Field label="Điện thoại"><input className="input" value={phone} onChange={(e) => setPhone(e.target.value)} /></Field>
       <Field label="Email"><input className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} /></Field>
-      {SCOPE_PARTY_TYPES.includes(type) && <div className="sm:col-span-2"><ScopePicker value={scopeIds} onChange={setScopes} /></div>}
+      {SCOPE_PARTY_TYPES.includes(type) && <div className="sm:col-span-2"><ScopePicker value={scopeIds} notes={scopeNotes} onChange={(v, n) => { setScopes(v); setNotes(n); }} /></div>}
       {m.error ? <div className="sm:col-span-2"><ErrorBox error={m.error} /></div> : null}
       <div className="sm:col-span-2"><button className="btn-primary" disabled={m.isPending}>Thêm</button></div>
     </form>

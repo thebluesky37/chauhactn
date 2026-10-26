@@ -260,11 +260,18 @@ def test_party_scopes(aws):
     assert kts["scopeIds"] == []  # Kiến trúc không có scope
     code, _ = call(admin, event("POST", base, {"type": "investor", "name": "X", "scopeIds": ["Z.9"]}))
     assert code == 400
-    code, upd = call(admin, event("PATCH", f"{base}/{sub['id']}", {"name": "Thầu mới", "scopeIds": ["VII.1"]}))
-    assert code == 200 and upd["name"] == "Thầu mới" and upd["scopeIds"] == ["VII.1"]
+    code, upd = call(admin, event("PATCH", f"{base}/{sub['id']}", {
+        "name": "Thầu mới", "scopeIds": ["VII.1", "I.1"], "scopeNotes": {"VII.1": " Ghi chú khí nén ", "I.1": "", "II.1": "bỏ"}}))
+    assert code == 200 and upd["name"] == "Thầu mới" and upd["scopeIds"] == ["I.1", "VII.1"]
+    assert upd["scopeNotes"] == {"VII.1": "Ghi chú khí nén"}  # bỏ ghi chú rỗng và ghi chú của scope không chọn
+    code, upd = call(admin, event("PATCH", f"{base}/{sub['id']}", {"scopeIds": ["I.1"]}))
+    assert upd["scopeNotes"] == {}  # bỏ chọn scope thì mất ghi chú
+    code, upd = call(admin, event("PATCH", f"{base}/{sub['id']}", {"scopeIds": ["VII.1"], "scopeNotes": {"VII.1": "Ghi chú khí nén"}}))
     code, _ = call(admin, event("PATCH", f"{base}/nope", {"name": "x"}))
     assert code == 404
 
     ws = load_workbook(io.BytesIO(build_workbook(db.project_view(p["id"])))).active
     text = [str(c.value) for row in ws.iter_rows() for c in row if c.value is not None]
-    assert "VII. HỆ THỐNG KHÍ NÉN: (tất cả)" in text
+    assert "VII. HỆ THỐNG KHÍ NÉN" in text and "X" in text and "Ghi chú khí nén" in text
+    assert "Ghi chú" in text and "KT\n(Kiến trúc)" not in text  # Kiến trúc không có cột scope
+    assert "Thầu mới\n(Thầu phụ)" in text

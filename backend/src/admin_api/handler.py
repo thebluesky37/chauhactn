@@ -66,6 +66,15 @@ def _clean_scopes(party_type, scope_ids):
     return [sid for sid in SCOPES if sid in wanted]
 
 
+def _clean_scope_notes(scope_ids, notes):
+    """Ghi chú theo scope: chỉ giữ cho scope đã chọn, bỏ ghi chú rỗng."""
+    out = {}
+    for sid, text in (notes or {}).items():
+        if sid in scope_ids and isinstance(text, str) and text.strip():
+            out[sid] = text.strip()
+    return out
+
+
 def _project_or_404(project_id):
     item = db.get_project_item(project_id)
     if not item:
@@ -198,6 +207,7 @@ def add_party(event, project_id):
         "email": data.get("email", ""),
         "scopeIds": _clean_scopes(data["type"], data.get("scopeIds")),
     }
+    item["scopeNotes"] = _clean_scope_notes(item["scopeIds"], data.get("scopeNotes"))
     db.table().put_item(Item=item)
     return response(201, db.strip_keys(item))
 
@@ -218,6 +228,10 @@ def update_party(event, project_id, party_id):
         raise HttpError(400, "Tên không được để trống")
     if "scopeIds" in data:
         item["scopeIds"] = _clean_scopes(item["type"], data["scopeIds"])
+    if "scopeIds" in data or "scopeNotes" in data:
+        item["scopeNotes"] = _clean_scope_notes(
+            item.get("scopeIds", []), data.get("scopeNotes", item.get("scopeNotes"))
+        )
     db.table().put_item(Item=item)
     _audit(event, "party.update", {"project": project_id, "id": party_id})
     return response(200, db.strip_keys(item))
