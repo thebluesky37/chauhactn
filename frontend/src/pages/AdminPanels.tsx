@@ -153,6 +153,42 @@ export function AddPartyForm({ projectId, onDone }: { projectId: string; onDone:
   );
 }
 
+export function EditTaskForm({ projectId, task, partyName, onDone, onCancel }: { projectId: string; task: Task; partyName: string; onDone: () => void; onCancel: () => void }) {
+  const [name, setName] = useState(task.name);
+  const [startDate, setStart] = useState(task.startDate);
+  const [endDate, setEnd] = useState(task.endDate);
+  const m = useMutation({
+    mutationFn: () => patch(`/admin/projects/${projectId}/tasks/${task.id}`, { name, startDate, endDate }),
+    onSuccess: onDone,
+  });
+  const del = useMutation({
+    mutationFn: () => api(`/admin/projects/${projectId}/tasks/${task.id}`, { method: "DELETE" }),
+    onSuccess: onDone,
+  });
+  return (
+    <form className="grid gap-4 p-4 sm:grid-cols-2" onSubmit={(e) => { e.preventDefault(); m.mutate(); }}>
+      <p className="text-sm text-slate-500 sm:col-span-2">Thầu phụ: <b>{partyName}</b> (không đổi được)</p>
+      <div className="sm:col-span-2"><Field label="Tên công việc"><input className="input" required value={name} onChange={(e) => setName(e.target.value)} /></Field></div>
+      <Field label="Ngày bắt đầu"><input className="input" type="date" required value={startDate} onChange={(e) => setStart(e.target.value)} /></Field>
+      <Field label="Ngày kết thúc"><input className="input" type="date" required min={startDate} value={endDate} onChange={(e) => setEnd(e.target.value)} /></Field>
+      {m.error ? <div className="sm:col-span-2"><ErrorBox error={m.error} /></div> : null}
+      {del.error ? <div className="sm:col-span-2"><ErrorBox error={del.error} /></div> : null}
+      <div className="flex flex-wrap gap-3 sm:col-span-2">
+        <button className="btn-primary" disabled={m.isPending}>Lưu</button>
+        <button type="button" className="btn-ghost" onClick={onCancel}>Hủy</button>
+        <button
+          type="button"
+          className="btn-ghost ml-auto !text-red-600"
+          disabled={del.isPending}
+          onClick={() => { if (window.confirm(`Xóa hạng mục “${task.name}”? Không hoàn tác được.`)) del.mutate(); }}
+        >
+          {del.isPending ? "Đang xóa…" : "Xóa hạng mục"}
+        </button>
+      </div>
+    </form>
+  );
+}
+
 export function AddTaskForm({ projectId, subcontractors, onDone }: { projectId: string; subcontractors: Party[]; onDone: () => void }) {
   const [partyId, setParty] = useState("");
   const [name, setName] = useState("");

@@ -7,7 +7,7 @@ import { fmtDate, PARTY_LABEL } from "../lib/format";
 import { Empty, ErrorBox, Field, Skeleton } from "../components/ui";
 import { DeleteProject } from "../components/DeleteProject";
 import { UploadRow } from "../components/UploadRow";
-import { AddPartyForm, AddTaskForm, EditPartyForm, NoteForm, UploadForm } from "./AdminPanels";
+import { AddPartyForm, AddTaskForm, EditPartyForm, EditTaskForm, NoteForm, UploadForm } from "./AdminPanels";
 
 const SECTIONS = ["Thông tin dự án", "Các bên", "Hạng mục", "Đăng tải cập nhật", "Vùng nguy hiểm"] as const;
 type Section = (typeof SECTIONS)[number];
@@ -167,6 +167,7 @@ function PartiesSection({ id, data, onDone }: { id: string; data: ProjectView; o
 }
 
 function TasksSection({ id, data, onDone }: { id: string; data: ProjectView; onDone: () => void }) {
+  const [editing, setEditing] = useState<string | null>(null);
   const partyName = (pid: string) => data.parties.find((x) => x.id === pid)?.name ?? "—";
   return (
     <>
@@ -174,15 +175,19 @@ function TasksSection({ id, data, onDone }: { id: string; data: ProjectView; onD
         <Empty title="Chưa có hạng mục" hint="Hạng mục thuộc về các thầu phụ của dự án." />
       ) : (
         <div className="card divide-y divide-slate-200 dark:divide-slate-800">
-          {data.tasks.map((t) => (
-            <div key={t.id} className="flex flex-wrap justify-between gap-2 p-4">
-              <div>
-                <p className="font-medium">{t.name}</p>
-                <p className="text-sm text-slate-500">{partyName(t.partyId)}</p>
+          {data.tasks.map((t) =>
+            editing === t.id ? (
+              <EditTaskForm key={t.id} projectId={id} task={t} partyName={partyName(t.partyId)} onDone={() => { setEditing(null); onDone(); }} onCancel={() => setEditing(null)} />
+            ) : (
+              <div key={t.id} className="flex flex-wrap items-center justify-between gap-2 p-4">
+                <div>
+                  <p className="font-medium">{t.name}</p>
+                  <p className="text-sm text-slate-500">{partyName(t.partyId)} · {fmtDate(t.startDate)} – {fmtDate(t.endDate)}</p>
+                </div>
+                <button className="btn-ghost !min-h-[32px] !px-3 text-sm" onClick={() => setEditing(t.id)}>Sửa</button>
               </div>
-              <p className="text-sm text-slate-500">{fmtDate(t.startDate)} – {fmtDate(t.endDate)}</p>
-            </div>
-          ))}
+            ),
+          )}
         </div>
       )}
       <AddTaskForm projectId={id} subcontractors={data.parties.filter((x) => x.type === "subcontractor")} onDone={onDone} />

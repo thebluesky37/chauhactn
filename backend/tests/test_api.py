@@ -336,3 +336,25 @@ def test_public_scope_catalog_no_auth(aws):
 
     code, body = call(public, event("GET", "/public/scopes", groups="[]"))
     assert code == 200 and body["groups"][0]["items"][0]["name"] == "Trung thế"
+
+
+def test_edit_and_delete_task(aws):
+    from admin_api import handler as admin
+
+    _, p = call(admin, event("POST", "/admin/projects", {"name": "P", "startDate": "2026-01-01", "plannedEndDate": "2026-12-31"}))
+    base = f"/admin/projects/{p['id']}"
+    _, sub = call(admin, event("POST", f"{base}/parties", {"type": "subcontractor", "name": "Thầu"}))
+    _, t1 = call(admin, event("POST", f"{base}/tasks", {"partyId": sub["id"], "name": "Móng", "startDate": "2026-01-01", "endDate": "2026-02-01"}))
+    _, t2 = call(admin, event("POST", f"{base}/tasks", {"partyId": sub["id"], "name": "Cột", "startDate": "2026-02-01", "endDate": "2026-03-01"}))
+
+    code, upd = call(admin, event("PATCH", f"{base}/tasks/{t1['id']}", {"name": " Móng cọc ", "endDate": "2026-02-15", "partyId": "khac"}))
+    assert code == 200 and upd["name"] == "Móng cọc" and upd["endDate"] == "2026-02-15" and upd["partyId"] == sub["id"]
+    assert call(admin, event("PATCH", f"{base}/tasks/{t1['id']}", {"endDate": "2025-01-01"}))[0] == 400
+    assert call(admin, event("PATCH", f"{base}/tasks/{t1['id']}", {"name": " "}))[0] == 400
+    assert call(admin, event("PATCH", f"{base}/tasks/nope", {"name": "x"}))[0] == 404
+
+    call(admin, event("POST", f"{base}/uploads", {"partyType": "subcontractor", "partyId": sub["id"], "taskId": t1["id"], "sentDate": "2026-02-01", "files": []}))
+    code, err = call(admin, event("DELETE", f"{base}/tasks/{t1['id']}"))
+    assert code == 409 and "1 bản ghi" in err["message"]
+    assert call(admin, event("DELETE", f"{base}/tasks/{t2['id']}"))[0] == 200
+    assert call(admin, event("DELETE", f"{base}/tasks/{t2['id']}"))[0] == 404

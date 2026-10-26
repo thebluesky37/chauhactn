@@ -325,6 +325,45 @@ def add_task(event, project_id):
     return response(201, db.strip_keys(item))
 
 
+def _task_or_404(project_id, task_id):
+    item = db.table().get_item(Key={"PK": f"PROJECT#{project_id}", "SK": f"TASK#{task_id}"}).get("Item")
+    if not item:
+        raise HttpError(404, "Không tìm thấy hạng mục")
+    return item
+
+
+@router.route("PATCH", "/projects/{project_id}/tasks/{task_id}")
+def update_task(event, project_id, task_id):
+    """Sửa tên và thời gian. Không đổi thầu phụ vì các bản ghi đăng tải đã gắn với thầu phụ đó."""
+    _require_admin(event)
+    item = _task_or_404(project_id, task_id)
+    data = parse_body(event)
+    for f in ("name", "startDate", "endDate"):
+        if f in data:
+            item[f] = data[f]
+    if not str(item.get("name", "")).strip():
+        raise HttpError(400, "Tên công việc không được để trống")
+    if item["endDate"] < item["startDate"]:
+        raise HttpError(400, "Ngày kết thúc không được trước ngày bắt đầu")
+    item["name"] = item["name"].strip()
+    db.table().put_item(Item=item)
+    _audit(event, "task.update", {"project": project_id, "id": task_id})
+    return response(200, db.strip_keys(item))
+
+
+@router.route("DELETE", "/projects/{project_id}/tasks/{task_id}")
+def delete_task(event, project_id, task_id):
+    """Xóa hạng mục. Từ chối nếu còn bản ghi đăng tải gắn với hạng mục, để không mất dữ liệu."""
+    _require_admin(event)
+    item = _task_or_404(project_id, task_id)
+    uploads = [u for u in db.query_all(f"PROJECT#{project_id}", "UPLOAD#") if u.get("taskId") == task_id]
+    if uploads:
+        raise HttpError(409, f"Không thể xóa: hạng mục này còn {len(uploads)} bản ghi đăng tải liên quan.")
+    db.table().delete_item(Key={"PK": item["PK"], "SK": item["SK"]})
+    _audit(event, "task.delete", {"project": project_id, "id": task_id, "name": item["name"]})
+    return response(200, {"deleted": task_id})
+
+
 # ---------- Đăng tải file ----------
 
 def _check_filename(name, size):
