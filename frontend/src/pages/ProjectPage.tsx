@@ -221,12 +221,24 @@ function ScopeMatrix({ parties, admin, onEdit }: { parties: Party[]; admin: bool
   const cols = [...parties].sort((a, b) => ORDER.indexOf(a.type) - ORDER.indexOf(b.type) || a.name.localeCompare(b.name));
   const has = (p: Party, sid: string) => (p.scopeIds ?? []).includes(sid);
   const cell = "border border-slate-200 px-3 py-2 dark:border-slate-800";
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const toggle = (code: string) =>
+    setCollapsed((s) => {
+      const n = new Set(s);
+      if (!n.delete(code)) n.add(code);
+      return n;
+    });
+  const allCollapsed = collapsed.size === SCOPE_GROUPS.length;
   return (
     <div className="card overflow-x-auto">
       <table className="w-full min-w-[640px] border-collapse text-sm">
         <thead>
           <tr className="bg-brand-600 text-white">
-            <th className={`${cell} text-left`}>Scope công việc</th>
+            <th className={`${cell} text-left`}>
+              <button type="button" className="text-left font-semibold" onClick={() => setCollapsed(allCollapsed ? new Set() : new Set(SCOPE_GROUPS.map((g) => g.code)))}>
+                Scope công việc <span className="text-xs font-normal opacity-80">({allCollapsed ? "mở hết" : "thu gọn hết"})</span>
+              </button>
+            </th>
             {cols.map((p) => (
               <th key={p.id} className={`${cell} min-w-[140px] text-center font-semibold`}>
                 <div>{p.name}</div>
@@ -241,10 +253,18 @@ function ScopeMatrix({ parties, admin, onEdit }: { parties: Party[]; admin: bool
         <tbody>
           {SCOPE_GROUPS.map((g) => (
             <Fragment key={g.code}>
-              <tr className="bg-brand-50 font-semibold dark:bg-slate-800">
-                <td className={cell} colSpan={cols.length + 1}>{g.code}. {g.title}</td>
+              <tr className="cursor-pointer bg-brand-50 font-semibold dark:bg-slate-800" onClick={() => toggle(g.code)}>
+                <td className={cell}>
+                  <span className="mr-2 inline-block w-3 text-xs">{collapsed.has(g.code) ? "▶" : "▼"}</span>
+                  {g.code}. {g.title}
+                </td>
+                {cols.map((p) => {
+                  const n = g.items.filter((i) => has(p, i.id)).length;
+                  // khi thu gọn: hiện số scope con đã chọn; mở ra thì để trống
+                  return <td key={p.id} className={`${cell} text-center text-xs font-normal text-slate-500`}>{collapsed.has(g.code) && n > 0 ? `${n}/${g.items.length}` : ""}</td>;
+                })}
               </tr>
-              {g.items.map((i, n) => {
+              {!collapsed.has(g.code) && g.items.map((i, n) => {
                 const withNote = cols.filter((p) => p.scopeNotes?.[i.id]);
                 return (
                   <Fragment key={i.id}>
