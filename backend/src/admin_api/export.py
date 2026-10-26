@@ -11,7 +11,7 @@ STATUS = {"in_progress": "Đang thực hiện", "paused": "Tạm dừng", "done"
 PARTY = {
     "investor": "Chủ đầu tư",
     "architect": "Kiến trúc sư",
-    "coordinator": "Phối hợp kiến trúc",
+    "coordinator": "Tổng thầu MEP",
     "subcontractor": "Thầu phụ",
 }
 
@@ -52,17 +52,20 @@ def export_filename(project_name, now):
     return f"{safe}_{now.strftime('%Y-%m-%d')}.xlsx"
 
 
-def build_workbook(view, now=None, link_base=None):
+def build_workbook(view, now=None, link_base=None, party_types=None):
     """view: kết quả db.project_view (đã gồm cả bản ghi ẩn). Trả về bytes của file .xlsx.
 
+    party_types: danh sách loại bên cần xuất (None = tất cả); lọc các bên, hạng mục và lịch sử đăng tải.
     link_base: địa chỉ website (ví dụ https://www.hachauctn.id.vn). Có thì tên file là link bấm được,
     mở trang /download (yêu cầu Admin đăng nhập) rồi tải file. Link không hết hạn như presigned URL.
     """
     now = now or datetime.now(VN).replace(tzinfo=None)
+    types = [t for t in PARTY if party_types is None or t in party_types]
     p = view["project"]
-    parties = sorted(view["parties"], key=lambda x: (list(PARTY).index(x["type"]), x["name"]))
-    tasks = view["tasks"]
-    uploads = sorted(view["uploads"], key=lambda u: u["createdAt"], reverse=True)
+    parties = sorted((x for x in view["parties"] if x["type"] in types), key=lambda x: (list(PARTY).index(x["type"]), x["name"]))
+    selected_ids = {x["id"] for x in parties}
+    tasks = [t for t in view["tasks"] if t["partyId"] in selected_ids]
+    uploads = sorted((u for u in view["uploads"] if u["partyType"] in types), key=lambda u: u["createdAt"], reverse=True)
     notes = view["notes"]
 
     party_by_id = {x["id"]: x for x in view["parties"]}
@@ -225,7 +228,10 @@ def build_workbook(view, now=None, link_base=None):
 
     # ----- 5. Lịch sử đăng tải (mỗi bên một bảng, mỗi file một dòng) -----
     heading("5. LỊCH SỬ ĐĂNG TẢI")
-    for n, (ptype, plabel) in enumerate(PARTY.items(), 1):
+    for n, ptype in enumerate(PARTY, 1):
+        if ptype not in types:
+            continue
+        plabel = PARTY[ptype]
         ws.write(row, 1, f"5.{n}. Lịch sử đăng tải của {plabel}", sub_head)
         row += 1
         up_rows, up_keys = [], []

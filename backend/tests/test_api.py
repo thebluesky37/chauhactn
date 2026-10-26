@@ -217,3 +217,27 @@ def test_delete_project_removes_everything(aws):
     assert any(a["action"] == "project.delete" for pk in db.table().scan()["Items"] for a in [pk] if "action" in a)
 
     assert call(admin, event("DELETE", f"/admin/projects/{gone}"))[0] == 404
+
+
+def test_export_filtered_by_party_type():
+    import io
+
+    from openpyxl import load_workbook
+
+    from admin_api.export import build_workbook
+
+    view = {"project": {"id": "p", "name": "A", "status": "done", "guestVisible": False,
+                        "startDate": "2026-01-01", "plannedEndDate": "2026-02-01"},
+            "parties": [{"id": "a", "type": "investor", "name": "CĐT"},
+                        {"id": "b", "type": "subcontractor", "name": "Thầu B"},
+                        {"id": "c", "type": "architect", "name": "KTS C"}],
+            "tasks": [{"id": "t", "partyId": "b", "name": "Móng", "startDate": "2026-01-02", "endDate": "2026-01-09"}],
+            "notes": [],
+            "uploads": [{"id": f"u{x}", "partyType": ty, "partyId": x, "sentDate": "2026-01-02", "hidden": False,
+                         "createdAt": "2026-01-02T01:00:00.000000Z", "files": []}
+                        for x, ty in (("a", "investor"), ("b", "subcontractor"), ("c", "architect"))]}
+    ws = load_workbook(io.BytesIO(build_workbook(view, party_types=["investor", "subcontractor"]))).active
+    text = [str(c.value) for row in ws.iter_rows() for c in row if c.value is not None]
+    assert "Thầu B" in text and "CĐT" in text and "KTS C" not in text
+    assert "tblLichSu3" not in ws.tables  # kiến trúc sư (loại thứ 2) bị loại
+    assert {"tblLichSu1", "tblLichSu4"} <= set(ws.tables) and "tblLichSu2" not in ws.tables

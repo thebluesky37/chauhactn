@@ -24,8 +24,9 @@ export default function ProjectPage({ admin = false }: { admin?: boolean }) {
     queryFn: () => api<ProjectView>(`${prefix}/projects/${id}`),
   });
 
+  const [exportTypes, setExportTypes] = useState<PartyType[]>(Object.keys(PARTY_LABEL) as PartyType[]);
   const exportXlsx = useMutation({
-    mutationFn: () => api<{ url: string }>(`/admin/projects/${id}/export`),
+    mutationFn: () => api<{ url: string }>(`/admin/projects/${id}/export?parties=${exportTypes.join(",")}`),
     onSuccess: (r) => { window.location.href = r.url; },
   });
 
@@ -50,9 +51,33 @@ export default function ProjectPage({ admin = false }: { admin?: boolean }) {
         <div className="flex items-center gap-3">
           <StatusBadge status={p.status} />
           {admin && (
-            <button className="btn-ghost" onClick={() => exportXlsx.mutate()} disabled={exportXlsx.isPending}>
-              <FileSpreadsheet size={16} /> {exportXlsx.isPending ? "Đang xuất…" : "Xuất Excel"}
-            </button>
+            <details className="relative">
+              <summary className="btn-ghost cursor-pointer list-none">
+                <FileSpreadsheet size={16} /> {exportXlsx.isPending ? "Đang xuất…" : "Xuất Excel"}
+              </summary>
+              <div className="card absolute right-0 z-10 mt-2 w-64 space-y-2 p-4">
+                <p className="text-sm font-semibold">Các bên cần xuất</p>
+                {(Object.keys(PARTY_LABEL) as PartyType[]).map((t) => (
+                  <label key={t} className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      className="h-5 w-5 accent-brand-600"
+                      checked={exportTypes.includes(t)}
+                      onChange={(e) => setExportTypes((s) => (e.target.checked ? [...s, t] : s.filter((x) => x !== t)))}
+                    />
+                    {PARTY_LABEL[t]}
+                  </label>
+                ))}
+                <button
+                  type="button"
+                  className="btn-primary w-full"
+                  onClick={() => exportXlsx.mutate()}
+                  disabled={exportXlsx.isPending || exportTypes.length === 0}
+                >
+                  Tải file Excel
+                </button>
+              </div>
+            </details>
           )}
           {admin && (
             <DeleteProject

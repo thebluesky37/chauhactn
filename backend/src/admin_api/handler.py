@@ -278,7 +278,7 @@ def create_upload_record(event, project_id):
     if data["partyType"] == "subcontractor" and not data.get("taskId"):
         raise HttpError(400, "Thầu phụ phải chọn hạng mục công việc")
     if data["partyType"] == "coordinator" and not data.get("recipientIds"):
-        raise HttpError(400, "Phối hợp kiến trúc phải chọn bên nhận")
+        raise HttpError(400, "Tổng thầu MEP phải chọn bên nhận")
 
     existing = db.query_all(f"PROJECT#{project_id}", "UPLOAD#")
     files = []
@@ -378,8 +378,15 @@ def export_project(event, project_id):
     _project_or_404(project_id)
     from admin_api.export import build_workbook, export_filename  # nạp muộn: thư viện nằm trong Lambda layer
 
+    raw = (event.get("queryStringParameters") or {}).get("parties")
+    party_types = None
+    if raw is not None:
+        party_types = [t for t in raw.split(",") if t]
+        if not party_types or any(t not in PARTY_TYPES for t in party_types):
+            raise HttpError(400, "Loại bên không hợp lệ")
+
     view = db.project_view(project_id)
-    body = build_workbook(view, link_base=os.environ.get("WEB_BASE_URL"))
+    body = build_workbook(view, link_base=os.environ.get("WEB_BASE_URL"), party_types=party_types)
     filename = export_filename(view["project"]["name"], datetime.now(VN))
     key = f"exports/{project_id}/{db.new_id()}.xlsx"
     db.s3().put_object(

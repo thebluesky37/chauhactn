@@ -13,3 +13,9 @@ Chạy trên AWS (serverless, chi phí thấp): Amplify (React) · API Gateway +
 | `docs/TRIEN_KHAI.md` | Chạy thử bằng Docker, deploy AWS, gắn tên miền |
 
 Chạy thử local: `docker compose -f docker-compose.local.yml up -d --build` rồi mở http://localhost:5173.
+
+Deploy
+cd infra
+export AWS_PROFILE=chauhactn
+export TF_VAR_github_access_token=<token>
+terraform apply /tmp/tfplan
