@@ -1,22 +1,19 @@
-import { Fragment, useState } from "react";
+import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Download, EyeOff, FileSpreadsheet, FileText } from "lucide-react";
-import { api, patch, type Party, type PartyType, type ProjectView, type UploadRecord } from "../lib/api";
+import { api, patch, type PartyType, type ProjectView, type UploadRecord } from "../lib/api";
 import { fmtDate, fmtDateTime, fmtSize, PARTY_LABEL } from "../lib/format";
 import { Empty, ErrorBox, Skeleton, StatusBadge } from "../components/ui";
 import { DeleteProject } from "../components/DeleteProject";
 import { AddPartyForm, AddTaskForm, EditPartyForm, NoteForm, UploadForm } from "./AdminPanels";
-import { SCOPE_GROUPS } from "../lib/scopes";
 
 const EXPORT_PRESETS: { label: string; types: PartyType[] }[] = [
   { label: "Chủ đầu tư + Thầu phụ", types: ["investor", "subcontractor"] },
   { label: "Chủ đầu tư + Tổng thầu MEP", types: ["investor", "coordinator"] },
 ];
 
-const ORDER: PartyType[] = ["investor", "architect", "coordinator", "subcontractor"];
-
-const TABS = ["Tổng quan", "Scope công việc", "Hạng mục", "Lịch sử cập nhật"] as const;
+const TABS = ["Tổng quan", "Các bên", "Hạng mục", "Lịch sử cập nhật"] as const;
 
 export default function ProjectPage({ admin = false }: { admin?: boolean }) {
   const { id = "" } = useParams();
@@ -143,21 +140,35 @@ export default function ProjectPage({ admin = false }: { admin?: boolean }) {
         </section>
       )}
 
-      {tab === "Scope công việc" && (
+      {tab === "Các bên" && (
         <section className="space-y-4">
           {parties.length === 0 ? (
             <Empty title="Chưa có bên tham gia" />
           ) : (
-            <ScopeMatrix parties={parties} admin={admin} onEdit={(pid) => setEditingParty(pid)} />
-          )}
-          {editingParty && parties.find((x) => x.id === editingParty) && (
-            <EditPartyForm
-              key={editingParty}
-              projectId={id}
-              party={parties.find((x) => x.id === editingParty)!}
-              onDone={() => { setEditingParty(null); refresh(); }}
-              onCancel={() => setEditingParty(null)}
-            />
+            <div className="grid gap-3 sm:grid-cols-2">
+              {parties.map((x) =>
+                editingParty === x.id ? (
+                  <EditPartyForm
+                    key={x.id}
+                    projectId={id}
+                    party={x}
+                    onDone={() => { setEditingParty(null); refresh(); }}
+                    onCancel={() => setEditingParty(null)}
+                  />
+                ) : (
+                  <div key={x.id} className="card p-4">
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-brand-600">{PARTY_LABEL[x.type]}</p>
+                      {admin && <button className="btn-ghost !min-h-[32px] !px-3 text-sm" onClick={() => setEditingParty(x.id)}>Sửa</button>}
+                    </div>
+                    <p className="mt-1 font-semibold">{x.name}</p>
+                    <p className="mt-1 text-sm text-slate-500">
+                      {[x.contactName, x.phone, x.email].filter(Boolean).join(" · ") || "Chưa có liên hệ"}
+                    </p>
+                  </div>
+                ),
+              )}
+            </div>
           )}
           {admin && <AddPartyForm projectId={id} onDone={refresh} />}
         </section>
@@ -213,82 +224,6 @@ export default function ProjectPage({ admin = false }: { admin?: boolean }) {
           })}
         </section>
       )}
-    </div>
-  );
-}
-
-function ScopeMatrix({ parties, admin, onEdit }: { parties: Party[]; admin: boolean; onEdit: (id: string) => void }) {
-  const cols = [...parties].sort((a, b) => ORDER.indexOf(a.type) - ORDER.indexOf(b.type) || a.name.localeCompare(b.name));
-  const has = (p: Party, sid: string) => (p.scopeIds ?? []).includes(sid);
-  const cell = "border border-slate-200 px-3 py-2 dark:border-slate-800";
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
-  const toggle = (code: string) =>
-    setCollapsed((s) => {
-      const n = new Set(s);
-      if (!n.delete(code)) n.add(code);
-      return n;
-    });
-  const allCollapsed = collapsed.size === SCOPE_GROUPS.length;
-  return (
-    <div className="card overflow-x-auto">
-      <table className="w-full min-w-[640px] border-collapse text-sm">
-        <thead>
-          <tr className="bg-brand-600 text-white">
-            <th className={`${cell} text-left`}>
-              <button type="button" className="text-left font-semibold" onClick={() => setCollapsed(allCollapsed ? new Set() : new Set(SCOPE_GROUPS.map((g) => g.code)))}>
-                Scope công việc <span className="text-xs font-normal opacity-80">({allCollapsed ? "mở hết" : "thu gọn hết"})</span>
-              </button>
-            </th>
-            {cols.map((p) => (
-              <th key={p.id} className={`${cell} min-w-[140px] text-center font-semibold`}>
-                <div>{p.name}</div>
-                <div className="text-xs font-normal opacity-80">{PARTY_LABEL[p.type]}</div>
-                {admin && (
-                  <button className="mt-1 text-xs underline" onClick={() => onEdit(p.id)}>Sửa</button>
-                )}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {SCOPE_GROUPS.map((g) => (
-            <Fragment key={g.code}>
-              <tr className="cursor-pointer bg-brand-50 font-semibold dark:bg-slate-800" onClick={() => toggle(g.code)}>
-                <td className={cell}>
-                  <span className="mr-2 inline-block w-3 text-xs">{collapsed.has(g.code) ? "▶" : "▼"}</span>
-                  {g.code}. {g.title}
-                </td>
-                {cols.map((p) => {
-                  const n = g.items.filter((i) => has(p, i.id)).length;
-                  // khi thu gọn: hiện số scope con đã chọn; mở ra thì để trống
-                  return <td key={p.id} className={`${cell} text-center text-xs font-normal text-slate-500`}>{collapsed.has(g.code) && n > 0 ? `${n}/${g.items.length}` : ""}</td>;
-                })}
-              </tr>
-              {!collapsed.has(g.code) && g.items.map((i, n) => {
-                const withNote = cols.filter((p) => p.scopeNotes?.[i.id]);
-                return (
-                  <Fragment key={i.id}>
-                    <tr>
-                      <td className={`${cell} pl-6`}>{n + 1}. {i.name}</td>
-                      {cols.map((p) => (
-                        <td key={p.id} className={`${cell} text-center font-bold text-brand-600`}>{has(p, i.id) ? "X" : ""}</td>
-                      ))}
-                    </tr>
-                    {withNote.length > 0 && (
-                      <tr className="text-xs italic text-slate-500">
-                        <td className={`${cell} pl-10`}>Ghi chú</td>
-                        {cols.map((p) => (
-                          <td key={p.id} className={`${cell} whitespace-pre-wrap`}>{p.scopeNotes?.[i.id] ?? ""}</td>
-                        ))}
-                      </tr>
-                    )}
-                  </Fragment>
-                );
-              })}
-            </Fragment>
-          ))}
-        </tbody>
-      </table>
     </div>
   );
 }
