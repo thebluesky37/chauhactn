@@ -513,6 +513,18 @@ def edit_upload(event, project_id, upload_id):
     return response(200, db.strip_keys(item))
 
 
+@router.route("DELETE", "/projects/{project_id}/uploads/{upload_id}")
+def delete_upload(event, project_id, upload_id):
+    """Xóa vĩnh viễn một bản ghi đăng tải cùng các file của nó (mọi phiên bản). Không hoàn tác được."""
+    _require_admin(event)
+    item = _upload_item(project_id, upload_id)
+    removed = db.delete_upload_data(project_id, item)
+    _audit(event, "upload.delete", {
+        "project": project_id, "id": upload_id, "files": [f["name"] for f in item.get("files", [])], **removed,
+    })
+    return response(200, {"deleted": upload_id, **removed})
+
+
 @router.route("GET", "/projects/{project_id}/files/download")
 def download(event, project_id):
     _require_admin(event)

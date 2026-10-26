@@ -133,6 +133,17 @@ def _delete_prefix(prefix):
     return deleted
 
 
+def delete_upload_data(project_id, upload):
+    """Xóa một bản ghi đăng tải: mọi phiên bản file của nó trên S3, lịch sử sửa và bản ghi. Bản ghi xóa sau cùng."""
+    files = sum(_delete_prefix(f["key"]) for f in upload.get("files", []) if f.get("key"))
+    revs = query_all(f"UPLOAD#{upload['id']}")
+    with table().batch_writer() as batch:
+        for r in revs:
+            batch.delete_item(Key={"PK": r["PK"], "SK": r["SK"]})
+    table().delete_item(Key={"PK": upload["PK"], "SK": upload["SK"]})
+    return {"files": files, "records": len(revs) + 1}
+
+
 def delete_project_data(project_id):
     """Xóa toàn bộ dữ liệu của dự án: file trên S3 (kể cả báo cáo đã xuất), bản ghi, lịch sử sửa.
 

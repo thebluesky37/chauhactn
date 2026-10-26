@@ -358,3 +358,33 @@ def test_edit_and_delete_task(aws):
     assert code == 409 and "1 bản ghi" in err["message"]
     assert call(admin, event("DELETE", f"{base}/tasks/{t2['id']}"))[0] == 200
     assert call(admin, event("DELETE", f"{base}/tasks/{t2['id']}"))[0] == 404
+
+
+def test_delete_upload(aws):
+    from admin_api import handler as admin
+
+    s3 = boto3.client("s3", region_name="ap-southeast-1")
+    s3.put_bucket_versioning(Bucket="files", VersioningConfiguration={"Status": "Enabled"})
+    _, p = call(admin, event("POST", "/admin/projects", {"name": "P", "startDate": "2026-01-01", "plannedEndDate": "2026-12-31"}))
+    base = f"/admin/projects/{p['id']}"
+    _, party = call(admin, event("POST", f"{base}/parties", {"type": "investor", "name": "CĐT"}))
+
+    def make(name):
+        key = f"projects/{p['id']}/{name}/f.pdf"
+        s3.put_object(Bucket="files", Key=key, Body=b"1")
+        s3.put_object(Bucket="files", Key=key, Body=b"22")
+        _, u = call(admin, event("POST", f"{base}/uploads", {"partyType": "investor", "partyId": party["id"], "sentDate": "2026-01-02", "files": [{"name": "f.pdf", "key": key}]}))
+        return u, key
+
+    u1, k1 = make("a")
+    u2, k2 = make("b")
+    call(admin, event("PATCH", f"{base}/uploads/{u1['id']}", {"description": "sửa"}))  # tạo lịch sử sửa
+
+    code, res = call(admin, event("DELETE", f"{base}/uploads/{u1['id']}"))
+    assert code == 200 and res["files"] == 2  # cả 2 phiên bản S3
+    assert "Versions" not in s3.list_object_versions(Bucket="files", Prefix=k1)
+    assert s3.list_object_versions(Bucket="files", Prefix=k2)["Versions"]  # bản ghi khác còn nguyên
+    _, view = call(admin, event("GET", base))
+    assert [u["id"] for u in view["uploads"]] == [u2["id"]]
+    assert call(admin, event("DELETE", f"{base}/uploads/{u1['id']}"))[0] == 404
+    assert call(admin, event("DELETE", f"{base}/uploads/{u2['id']}", groups="[]"))[0] == 403

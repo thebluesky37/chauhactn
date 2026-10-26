@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Eye, EyeOff } from "lucide-react";
+import { ArrowLeft, Eye, EyeOff, Trash2 } from "lucide-react";
 import { api, patch, type Project, type ProjectView } from "../lib/api";
 import { fmtDate, PARTY_LABEL } from "../lib/format";
 import { Empty, ErrorBox, Field, Skeleton } from "../components/ui";
@@ -195,15 +195,33 @@ function TasksSection({ id, data, onDone }: { id: string; data: ProjectView; onD
   );
 }
 
-function HideButton({ projectId, u, onDone }: { projectId: string; u: ProjectView["uploads"][number]; onDone: () => void }) {
+function UploadActions({ projectId, u, onDone }: { projectId: string; u: ProjectView["uploads"][number]; onDone: () => void }) {
   const hide = useMutation({
     mutationFn: () => patch(`/admin/projects/${projectId}/uploads/${u.id}`, { hidden: !u.hidden }),
     onSuccess: onDone,
   });
+  const del = useMutation({
+    mutationFn: () => api(`/admin/projects/${projectId}/uploads/${u.id}`, { method: "DELETE" }),
+    onSuccess: onDone,
+  });
+  function onDelete() {
+    const msg = u.files.length > 0
+      ? `Xóa bản ghi đăng tải này cùng ${u.files.length} file? File bị xóa vĩnh viễn, không hoàn tác được.`
+      : "Xóa bản ghi đăng tải này? Không hoàn tác được.";
+    if (window.confirm(msg)) del.mutate();
+  }
   return (
-    <button className="btn-ghost mt-3" onClick={() => hide.mutate()} disabled={hide.isPending}>
-      <EyeOff size={16} /> {u.hidden ? "Hiện lại bản ghi" : "Ẩn bản ghi"}
-    </button>
+    <>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <button className="btn-ghost" onClick={() => hide.mutate()} disabled={hide.isPending}>
+          <EyeOff size={16} /> {u.hidden ? "Hiện lại bản ghi" : "Ẩn bản ghi"}
+        </button>
+        <button className="btn-ghost !text-red-600" onClick={onDelete} disabled={del.isPending}>
+          <Trash2 size={16} /> {del.isPending ? "Đang xóa…" : "Xóa bản ghi"}
+        </button>
+      </div>
+      {del.error ? <div className="mt-2"><ErrorBox error={del.error} /></div> : null}
+    </>
   );
 }
 
@@ -225,7 +243,7 @@ function UploadsSection({ id, data, onDone }: { id: string; data: ProjectView; o
             projectId={id}
             partyName={partyName(u.partyId)}
             taskName={taskName(u.taskId)}
-            actions={<HideButton projectId={id} u={u} onDone={onDone} />}
+            actions={<UploadActions projectId={id} u={u} onDone={onDone} />}
           />
         ))
       )}
