@@ -8,6 +8,11 @@ import { Empty, ErrorBox, Skeleton, StatusBadge } from "../components/ui";
 import { DeleteProject } from "../components/DeleteProject";
 import { AddPartyForm, AddTaskForm, NoteForm, UploadForm } from "./AdminPanels";
 
+const EXPORT_PRESETS: { label: string; types: PartyType[] }[] = [
+  { label: "Chủ đầu tư + Thầu phụ", types: ["investor", "subcontractor"] },
+  { label: "Chủ đầu tư + Tổng thầu MEP", types: ["investor", "coordinator"] },
+];
+
 const TABS = ["Tổng quan", "Các bên", "Hạng mục", "Lịch sử cập nhật"] as const;
 
 export default function ProjectPage({ admin = false }: { admin?: boolean }) {
@@ -24,9 +29,9 @@ export default function ProjectPage({ admin = false }: { admin?: boolean }) {
     queryFn: () => api<ProjectView>(`${prefix}/projects/${id}`),
   });
 
-  const [exportTypes, setExportTypes] = useState<PartyType[]>(Object.keys(PARTY_LABEL) as PartyType[]);
+  const [exportPreset, setExportPreset] = useState(0);
   const exportXlsx = useMutation({
-    mutationFn: () => api<{ url: string }>(`/admin/projects/${id}/export?parties=${exportTypes.join(",")}`),
+    mutationFn: () => api<{ url: string }>(`/admin/projects/${id}/export?parties=${EXPORT_PRESETS[exportPreset].types.join(",")}`),
     onSuccess: (r) => { window.location.href = r.url; },
   });
 
@@ -57,22 +62,23 @@ export default function ProjectPage({ admin = false }: { admin?: boolean }) {
               </summary>
               <div className="card absolute right-0 z-10 mt-2 w-64 space-y-2 p-4">
                 <p className="text-sm font-semibold">Các bên cần xuất</p>
-                {(Object.keys(PARTY_LABEL) as PartyType[]).map((t) => (
-                  <label key={t} className="flex items-center gap-2 text-sm">
+                {EXPORT_PRESETS.map((x, i) => (
+                  <label key={x.label} className="flex items-center gap-2 text-sm">
                     <input
-                      type="checkbox"
+                      type="radio"
+                      name="export-preset"
                       className="h-5 w-5 accent-brand-600"
-                      checked={exportTypes.includes(t)}
-                      onChange={(e) => setExportTypes((s) => (e.target.checked ? [...s, t] : s.filter((x) => x !== t)))}
+                      checked={exportPreset === i}
+                      onChange={() => setExportPreset(i)}
                     />
-                    {PARTY_LABEL[t]}
+                    {i + 1}. {x.label}
                   </label>
                 ))}
                 <button
                   type="button"
                   className="btn-primary w-full"
                   onClick={() => exportXlsx.mutate()}
-                  disabled={exportXlsx.isPending || exportTypes.length === 0}
+                  disabled={exportXlsx.isPending}
                 >
                   Tải file Excel
                 </button>
