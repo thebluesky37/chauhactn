@@ -47,9 +47,6 @@ function Layout() {
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8">
         <Outlet />
       </main>
-      <footer className="border-t border-slate-200 py-6 text-center text-sm text-slate-500 dark:border-slate-800">
-        © {new Date().getFullYear()} Quản lý Dự án
-      </footer>
     </div>
   );
 }
