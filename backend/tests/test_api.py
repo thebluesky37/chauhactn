@@ -130,7 +130,11 @@ def test_export_workbook_single_sheet():
     assert set(ws.tables) == {"tblHangMuc", "tblLichSu4"}  # mỗi bên một bảng, chỉ bên có dữ liệu mới có bảng
     text = [str(c.value) for row in ws.iter_rows() for c in row if c.value is not None]
     assert any("TÒA NHÀ A" in t for t in text)
-    assert "Đã ẩn" in text  # bản ghi ẩn vẫn được xuất, có cột trạng thái
+    assert "Đã ẩn" not in text  # không còn cột Trạng thái
+    heads = lambda name: [c.name for c in ws.tables[name].tableColumns]
+    assert "Hạng mục" in heads("tblLichSu4")  # chỉ Thầu phụ có cột Hạng mục
+    for banned in ("Loại", "Dung lượng", "Phiên bản", "Trạng thái"):
+        assert banned not in heads("tblLichSu4")
     assert sum(1 for t in text if t in ("a.xlsx", "b.dwg")) == 2  # mỗi file một dòng
     assert export_filename('A/B:"C"', __import__("datetime").datetime(2026, 3, 4)) == "ABC_2026-03-04.xlsx"
 
@@ -237,6 +241,7 @@ def test_export_filtered_by_party_type():
                          "createdAt": "2026-01-02T01:00:00.000000Z", "files": []}
                         for x, ty in (("a", "investor"), ("b", "subcontractor"), ("c", "architect"))]}
     ws = load_workbook(io.BytesIO(build_workbook(view, party_types=["investor", "subcontractor"]))).active
+    assert "Hạng mục" not in [c.name for c in ws.tables["tblLichSu1"].tableColumns]  # bảng Chủ đầu tư không có Hạng mục
     text = [str(c.value) for row in ws.iter_rows() for c in row if c.value is not None]
     assert "Thầu B" in text and "CĐT" in text and "KTS C" not in text
     assert "tblLichSu3" not in ws.tables  # kiến trúc sư (loại thứ 2) bị loại

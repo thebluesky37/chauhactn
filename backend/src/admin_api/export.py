@@ -105,11 +105,9 @@ def build_workbook(view, now=None, link_base=None, party_types=None, catalog=Non
 
     link_fmt = f(font_color=BLUE, underline=1, text_wrap=True, valign="top", indent=1)
     t_text = f(text_wrap=True, valign="top", indent=1)
-    t_center = f(align="center", valign="top")
     t_date = f(align="center", valign="top", num_format="dd/mm/yyyy")
     t_dt = f(align="center", valign="top", num_format="dd/mm/yyyy hh:mm")
     t_int = f(align="center", valign="top", num_format="0")
-    t_mb = f(align="right", valign="top", num_format='#,##0.00 "MB"')
 
     ws.hide_gridlines(2)
     for col, w in WIDTHS.items():
@@ -263,38 +261,32 @@ def build_workbook(view, now=None, link_base=None, party_types=None, catalog=Non
         plabel = PARTY[ptype]
         ws.write(row, 1, f"5.{n}. Lịch sử đăng tải của {plabel}", sub_head)
         row += 1
+        # Cột Hạng mục chỉ có ở bảng của Thầu phụ.
+        with_task = ptype == "subcontractor"
+        columns = [("Tên bên", t_text)]
+        if with_task:
+            columns.append(("Hạng mục", t_text))
+        columns += [("Ngày gửi", t_date), ("Mô tả", t_text), ("Ghi chú Admin", t_text), ("Tên file", t_text), ("Đăng tải lúc", t_dt)]
+        file_col = 1 + next(i for i, c in enumerate(columns) if c[0] == "Tên file")  # bảng bắt đầu ở cột B
         up_rows, up_keys = [], []
         for u in (x for x in uploads if x["partyType"] == ptype):
             party = party_by_id.get(u["partyId"], {})
             task = task_by_id.get(u.get("taskId"), {})
             # lần cập nhật không kèm file vẫn hiện một dòng
             for fl in u.get("files") or [None]:
-                ext = fl["name"].rsplit(".", 1)[-1].upper() if fl and "." in fl["name"] else ""
-                up_rows.append([
-                    party.get("name", "—"),
-                    task.get("name", ""),
-                    _date(u.get("sentDate")),
-                    u.get("description", ""),
-                    u.get("adminNote", ""),
-                    fl["name"] if fl else "",
-                    ext,
-                    fl["size"] / 1048576 if fl else None,
-                    fl.get("version", 1) if fl else None,
-                    _dt_vn(u["createdAt"]),
-                    "Đã ẩn" if u.get("hidden") else "Hiện",
-                ])
+                up_rows.append(
+                    [party.get("name", "—")]
+                    + ([task.get("name", "")] if with_task else [])
+                    + [_date(u.get("sentDate")), u.get("description", ""), u.get("adminNote", ""),
+                       fl["name"] if fl else "", _dt_vn(u["createdAt"])]
+                )
                 up_keys.append(fl.get("key") if fl else None)
-        first = table(
-            [("Tên bên", t_text), ("Hạng mục", t_text), ("Ngày gửi", t_date),
-             ("Mô tả", t_text), ("Ghi chú Admin", t_text), ("Tên file", t_text), ("Loại", t_center),
-             ("Dung lượng", t_mb), ("Phiên bản", t_int), ("Đăng tải lúc", t_dt), ("Trạng thái", t_center)],
-            up_rows, f"tblLichSu{n}",
-        )
+        first = table(columns, up_rows, f"tblLichSu{n}")
         if first is not None and link_base:
             for i, key in enumerate(up_keys):
                 if key:
                     url = f"{link_base.rstrip('/')}/download?p={quote(view['project']['id'], safe='')}&k={quote(key, safe='')}"
-                    ws.write_url(first + i, 6, url, link_fmt, string=up_rows[i][5], tip="Bấm để tải file (cần đăng nhập Admin)")
+                    ws.write_url(first + i, file_col, url, link_fmt, string=up_rows[i][file_col - 1], tip="Bấm để tải file (cần đăng nhập Admin)")
         row += 1
 
     # ----- In ấn -----
