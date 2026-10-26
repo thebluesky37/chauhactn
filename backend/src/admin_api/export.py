@@ -232,9 +232,6 @@ def build_workbook(view, now=None, link_base=None):
         for u in (x for x in uploads if x["partyType"] == ptype):
             party = party_by_id.get(u["partyId"], {})
             task = task_by_id.get(u.get("taskId"), {})
-            recipients = ", ".join(party_by_id[r]["name"] for r in u.get("recipientIds", []) if r in party_by_id)
-            pf, pt = _date(u.get("periodFrom")), _date(u.get("periodTo"))
-            period = f"{_fmt_d(pf)} – {_fmt_d(pt)}" if pf and pt else (_fmt_d(pf or pt))
             # lần cập nhật không kèm file vẫn hiện một dòng
             for fl in u.get("files") or [None]:
                 ext = fl["name"].rsplit(".", 1)[-1].upper() if fl and "." in fl["name"] else ""
@@ -242,8 +239,6 @@ def build_workbook(view, now=None, link_base=None):
                     party.get("name", "—"),
                     task.get("name", ""),
                     _date(u.get("sentDate")),
-                    period,
-                    recipients,
                     u.get("description", ""),
                     u.get("adminNote", ""),
                     fl["name"] if fl else "",
@@ -255,8 +250,8 @@ def build_workbook(view, now=None, link_base=None):
                 ])
                 up_keys.append(fl.get("key") if fl else None)
         first = table(
-            [("Tên bên", t_text), ("Hạng mục", t_text), ("Ngày gửi", t_date), ("Kỳ báo cáo", t_center),
-             ("Bên nhận", t_text), ("Mô tả", t_text), ("Ghi chú Admin", t_text), ("Tên file", t_text), ("Loại", t_center),
+            [("Tên bên", t_text), ("Hạng mục", t_text), ("Ngày gửi", t_date),
+             ("Mô tả", t_text), ("Ghi chú Admin", t_text), ("Tên file", t_text), ("Loại", t_center),
              ("Dung lượng", t_mb), ("Phiên bản", t_int), ("Đăng tải lúc", t_dt), ("Trạng thái", t_center)],
             up_rows, f"tblLichSu{n}",
         )
@@ -264,7 +259,7 @@ def build_workbook(view, now=None, link_base=None):
             for i, key in enumerate(up_keys):
                 if key:
                     url = f"{link_base.rstrip('/')}/download?p={quote(view['project']['id'], safe='')}&k={quote(key, safe='')}"
-                    ws.write_url(first + i, 8, url, link_fmt, string=up_rows[i][7], tip="Bấm để tải file (cần đăng nhập Admin)")
+                    ws.write_url(first + i, 6, url, link_fmt, string=up_rows[i][5], tip="Bấm để tải file (cần đăng nhập Admin)")
         row += 1
 
     # ----- In ấn -----
