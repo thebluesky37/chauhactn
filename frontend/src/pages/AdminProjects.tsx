@@ -61,7 +61,8 @@ export default function AdminProjects() {
                   Cho phép Khách xem
                 </label>
               </div>
-              <div className="w-full sm:w-auto">
+              <div className="flex w-full items-center gap-2 sm:w-auto">
+                <Link to={`/admin/projects/${p.id}/edit`} className="btn-ghost">Sửa</Link>
                 <DeleteProject id={p.id} name={p.name} onDeleted={() => qc.invalidateQueries({ queryKey: ["admin-projects"] })} />
               </div>
             </div>

@@ -329,3 +329,10 @@ def test_scope_catalog_editable(aws):
     assert call(admin, event("PUT", "/admin/scopes", {"groups": [{"title": "A", "items": [{"name": ""}]}]}))[0] == 400
     assert call(admin, event("PUT", "/admin/scopes", {"groups": "x"}))[0] == 400
     assert call(admin, event("GET", "/admin/scopes", groups="[]"))[0] == 403
+
+
+def test_public_scope_catalog_no_auth(aws):
+    from public_api import handler as public
+
+    code, body = call(public, event("GET", "/public/scopes", groups="[]"))
+    assert code == 200 and body["groups"][0]["items"][0]["name"] == "Trung thế"

@@ -1,13 +1,12 @@
 import { Fragment, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Download, EyeOff, FileSpreadsheet, FileText } from "lucide-react";
-import { api, patch, type Party, type PartyType, type ProjectView, type UploadRecord } from "../lib/api";
-import { fmtDate, fmtDateTime, fmtSize, PARTY_LABEL } from "../lib/format";
+import { Link, useParams } from "react-router-dom";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { ArrowLeft, FileSpreadsheet, Pencil } from "lucide-react";
+import { api, type Party, type PartyType, type ProjectView } from "../lib/api";
+import { fmtDate, fmtDateTime, PARTY_LABEL } from "../lib/format";
 import { Empty, ErrorBox, Skeleton, StatusBadge } from "../components/ui";
-import { DeleteProject } from "../components/DeleteProject";
+import { UploadRow } from "../components/UploadRow";
 import { roman, useScopeCatalog } from "../lib/scopes";
-import { AddPartyForm, AddTaskForm, EditPartyForm, NoteForm, UploadForm } from "./AdminPanels";
 
 const EXPORT_PRESETS: { label: string; types: PartyType[] }[] = [
   { label: "Chủ đầu tư + Thầu phụ", types: ["investor", "subcontractor"] },
@@ -16,17 +15,13 @@ const EXPORT_PRESETS: { label: string; types: PartyType[] }[] = [
 
 const ORDER: PartyType[] = ["investor", "architect", "coordinator", "subcontractor"];
 
-const ALL_TABS = ["Tổng quan", "Các bên", "Ma trận scope", "Hạng mục", "Lịch sử cập nhật"] as const;
+const TABS = ["Tổng quan", "Các bên", "Ma trận scope", "Hạng mục", "Lịch sử cập nhật"] as const;
 
 export default function ProjectPage({ admin = false }: { admin?: boolean }) {
   const { id = "" } = useParams();
-  const [tab, setTab] = useState<(typeof ALL_TABS)[number]>("Tổng quan");
-  const TABS = admin ? ALL_TABS : ALL_TABS.filter((t) => t !== "Ma trận scope"); // ma trận chỉ dành cho admin
+  const [tab, setTab] = useState<(typeof TABS)[number]>("Tổng quan");
   const prefix = admin ? "/admin" : "/public";
   const key = ["project", admin, id];
-  const qc = useQueryClient();
-  const nav = useNavigate();
-  const refresh = () => qc.invalidateQueries({ queryKey: key });
 
   const { data, isLoading, error } = useQuery({
     queryKey: key,
@@ -34,7 +29,6 @@ export default function ProjectPage({ admin = false }: { admin?: boolean }) {
   });
 
   const [exportPreset, setExportPreset] = useState(0);
-  const [editingParty, setEditingParty] = useState<string | null>(null);
   const exportXlsx = useMutation({
     mutationFn: () => api<{ url: string }>(`/admin/projects/${id}/export?parties=${EXPORT_PRESETS[exportPreset].types.join(",")}`),
     onSuccess: (r) => { window.location.href = r.url; },
@@ -91,29 +85,13 @@ export default function ProjectPage({ admin = false }: { admin?: boolean }) {
             </details>
           )}
           {admin && (
-            <DeleteProject
-              id={id}
-              name={p.name}
-              onDeleted={() => { qc.invalidateQueries({ queryKey: ["admin-projects"] }); nav("/admin"); }}
-            />
+            <Link to={`/admin/projects/${id}/edit`} className="btn-primary">
+              <Pencil size={16} /> Chỉnh sửa
+            </Link>
           )}
         </div>
       </header>
       {exportXlsx.error ? <ErrorBox error={exportXlsx.error} /> : null}
-
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {[
-          ["Các bên", parties.length],
-          ["Hạng mục", tasks.length],
-          ["Lần cập nhật", uploads.length],
-          ["Cập nhật gần nhất", uploads[0] ? fmtDate(uploads[0].createdAt) : "—"],
-        ].map(([label, value]) => (
-          <div key={label} className="card p-4">
-            <p className="text-xs text-slate-500">{label}</p>
-            <p className="mt-1 text-xl font-bold">{value}</p>
-          </div>
-        ))}
-      </div>
 
       <div className="flex gap-1 overflow-x-auto border-b border-slate-200 dark:border-slate-800" role="tablist">
         {TABS.map((t) => (
@@ -141,48 +119,33 @@ export default function ProjectPage({ admin = false }: { admin?: boolean }) {
             </p>
             {notes[0] && <p className="mt-2 text-xs text-slate-400">Cập nhật {fmtDateTime(notes[0].createdAt)}</p>}
           </div>
-          {admin && <NoteForm projectId={id} initial={notes[0]?.text ?? ""} onDone={refresh} />}
         </section>
       )}
 
       {tab === "Các bên" && (
-        <section className="space-y-4">
+        <section>
           {parties.length === 0 ? (
             <Empty title="Chưa có bên tham gia" />
           ) : (
             <div className="grid gap-3 sm:grid-cols-2">
-              {parties.map((x) =>
-                editingParty === x.id ? (
-                  <EditPartyForm
-                    key={x.id}
-                    projectId={id}
-                    party={x}
-                    onDone={() => { setEditingParty(null); refresh(); }}
-                    onCancel={() => setEditingParty(null)}
-                  />
-                ) : (
-                  <div key={x.id} className="card p-4">
-                    <div className="flex items-start justify-between gap-2">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-brand-600">{PARTY_LABEL[x.type]}</p>
-                      {admin && <button className="btn-ghost !min-h-[32px] !px-3 text-sm" onClick={() => setEditingParty(x.id)}>Sửa</button>}
-                    </div>
-                    <p className="mt-1 font-semibold">{x.name}</p>
-                    <p className="mt-1 text-sm text-slate-500">
-                      {[x.contactName, x.phone, x.email].filter(Boolean).join(" · ") || "Chưa có liên hệ"}
-                    </p>
-                  </div>
-                ),
-              )}
+              {parties.map((x) => (
+                <div key={x.id} className="card p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-brand-600">{PARTY_LABEL[x.type]}</p>
+                  <p className="mt-1 font-semibold">{x.name}</p>
+                  <p className="mt-1 text-sm text-slate-500">
+                    {[x.contactName, x.phone, x.email].filter(Boolean).join(" · ") || "Chưa có liên hệ"}
+                  </p>
+                </div>
+              ))}
             </div>
           )}
-          {admin && <AddPartyForm projectId={id} onDone={refresh} />}
         </section>
       )}
 
-      {admin && tab === "Ma trận scope" && (
+      {tab === "Ma trận scope" && (
         <section className="space-y-3">
-          <p className="text-sm text-slate-500">X: bên được giao scope. Bấm hàng nhóm để thu gọn. Sửa scope ở tab “Các bên”.</p>
-          {parties.length === 0 ? <Empty title="Chưa có bên tham gia" /> : <ScopeMatrix parties={parties} />}
+          <p className="text-sm text-slate-500">X: bên được giao scope. Bấm hàng nhóm để thu gọn.</p>
+          {parties.length === 0 ? <Empty title="Chưa có bên tham gia" /> : <ScopeMatrix parties={parties} admin={admin} />}
         </section>
       )}
 
@@ -203,13 +166,11 @@ export default function ProjectPage({ admin = false }: { admin?: boolean }) {
               ))}
             </div>
           )}
-          {admin && <AddTaskForm projectId={id} subcontractors={parties.filter((x) => x.type === "subcontractor")} onDone={refresh} />}
         </section>
       )}
 
       {tab === "Lịch sử cập nhật" && (
         <section className="space-y-4">
-          {admin && <UploadForm projectId={id} parties={parties} tasks={tasks} onDone={refresh} />}
           {uploads.length === 0 && <Empty title="Chưa có cập nhật" />}
           {(Object.keys(PARTY_LABEL) as PartyType[]).map((t) => {
             const list = uploads.filter((u) => u.partyType === t);
@@ -227,7 +188,6 @@ export default function ProjectPage({ admin = false }: { admin?: boolean }) {
                       projectId={id}
                       partyName={partyName(u.partyId)}
                       taskName={taskName(u.taskId)}
-                      onChanged={refresh}
                     />
                   ))
                 )}
@@ -240,8 +200,8 @@ export default function ProjectPage({ admin = false }: { admin?: boolean }) {
   );
 }
 
-function ScopeMatrix({ parties }: { parties: Party[] }) {
-  const { data: catalog = [], isLoading, error } = useScopeCatalog();
+function ScopeMatrix({ parties, admin }: { parties: Party[]; admin: boolean }) {
+  const { data: catalog = [], isLoading, error } = useScopeCatalog(admin);
   const cols = [...parties].sort((a, b) => ORDER.indexOf(a.type) - ORDER.indexOf(b.type) || a.name.localeCompare(b.name));
   const has = (p: Party, sid: string) => (p.scopeIds ?? []).includes(sid);
   const cell = "border border-slate-200 px-3 py-2 dark:border-slate-800";
@@ -442,56 +402,5 @@ function Overview({ data }: { data: ProjectView }) {
         )}
       </div>
     </>
-  );
-}
-
-function UploadRow({
-  u, admin, projectId, partyName, taskName, onChanged,
-}: {
-  u: UploadRecord; admin: boolean; projectId: string; partyName: string; taskName?: string; onChanged: () => void;
-}) {
-  const hide = useMutation({
-    mutationFn: () => patch(`/admin/projects/${projectId}/uploads/${u.id}`, { hidden: !u.hidden }),
-    onSuccess: onChanged,
-  });
-  async function download(key: string) {
-    const r = await api<{ url: string }>(`/admin/projects/${projectId}/files/download?key=${encodeURIComponent(key)}`);
-    window.open(r.url, "_blank");
-  }
-  return (
-    <article className={`card p-5 ${u.hidden ? "opacity-60" : ""}`}>
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-brand-600">{PARTY_LABEL[u.partyType]}</p>
-          <p className="font-semibold">{partyName}{taskName ? ` · ${taskName}` : ""}</p>
-        </div>
-        <p className="text-sm text-slate-500">
-          Gửi {fmtDate(u.sentDate)} · đăng {fmtDateTime(u.createdAt)}
-        </p>
-      </div>
-      {u.description && <p className="mt-2 whitespace-pre-wrap text-sm">{u.description}</p>}
-      {u.adminNote && <p className="mt-1 whitespace-pre-wrap text-sm text-slate-500">Ghi chú: {u.adminNote}</p>}
-      <ul className="mt-3 space-y-2">
-        {u.files.map((f) => (
-          <li key={(f.key ?? f.name) + f.version} className="flex items-center justify-between gap-2 rounded-lg bg-slate-50 px-3 py-2 text-sm dark:bg-slate-800">
-            <span className="flex min-w-0 items-center gap-2">
-              <FileText size={16} className="shrink-0 text-slate-400" />
-              <span className="truncate">{f.name}</span>
-              <span className="shrink-0 text-xs text-slate-400">v{f.version} · {fmtSize(f.size)}</span>
-            </span>
-            {admin && f.key && (
-              <button className="btn-ghost !min-h-[36px] !px-3" onClick={() => download(f.key!)} aria-label={`Tải ${f.name}`}>
-                <Download size={14} />
-              </button>
-            )}
-          </li>
-        ))}
-      </ul>
-      {admin && (
-        <button className="btn-ghost mt-3" onClick={() => hide.mutate()} disabled={hide.isPending}>
-          <EyeOff size={16} /> {u.hidden ? "Hiện lại bản ghi" : "Ẩn bản ghi"}
-        </button>
-      )}
-    </article>
   );
 }

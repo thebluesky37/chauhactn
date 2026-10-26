@@ -15,6 +15,12 @@ def _visible_project(project_id):
     return item
 
 
+@router.route("GET", "/scopes")
+def get_scopes(event):
+    """Danh mục scope dùng chung, để Khách xem ma trận scope của dự án."""
+    return response(200, {"groups": db.get_scope_catalog()})
+
+
 @router.route("GET", "/projects")
 def list_projects(event):
     resp = db.table().query(

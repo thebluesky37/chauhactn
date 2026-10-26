@@ -15,12 +15,13 @@ export interface ScopeGroup {
 // Kiến trúc không có scope.
 export const SCOPE_PARTY_TYPES = ["investor", "coordinator", "subcontractor"];
 
-export const SCOPE_CATALOG_KEY = ["scope-catalog"];
+export const SCOPE_CATALOG_KEY = ["scope-catalog", true];
 
-export function useScopeCatalog() {
+// Admin đọc qua /admin/scopes, Khách qua /public/scopes (cùng một danh mục).
+export function useScopeCatalog(admin = true) {
   return useQuery({
-    queryKey: SCOPE_CATALOG_KEY,
-    queryFn: () => api<{ groups: ScopeGroup[] }>("/admin/scopes").then((r) => r.groups),
+    queryKey: ["scope-catalog", admin],
+    queryFn: () => api<{ groups: ScopeGroup[] }>(`${admin ? "/admin" : "/public"}/scopes`).then((r) => r.groups),
   });
 }
 
