@@ -90,6 +90,7 @@ def build_workbook(view, now=None, link_base=None):
     empty = f(italic=True, font_color=GRAY, indent=1, border=1, border_color=BORDER)
     note_fmt = f(text_wrap=True, valign="top", border=1, border_color=BORDER, indent=1)
     note_meta = f(italic=True, font_size=10, font_color=GRAY)
+    sub_head = f(bold=True, font_size=12, font_color=NAVY)
 
     link_fmt = f(font_color=BLUE, underline=1, text_wrap=True, valign="top", indent=1)
     t_text = f(text_wrap=True, valign="top", indent=1)
@@ -222,46 +223,49 @@ def build_workbook(view, now=None, link_base=None):
         task_rows, "tblHangMuc",
     )
 
-    # ----- 5. Lịch sử đăng tải (mỗi file một dòng) -----
+    # ----- 5. Lịch sử đăng tải (mỗi bên một bảng, mỗi file một dòng) -----
     heading("5. LỊCH SỬ ĐĂNG TẢI")
-    up_rows, up_keys = [], []
-    for u in uploads:
-        party = party_by_id.get(u["partyId"], {})
-        task = task_by_id.get(u.get("taskId"), {})
-        recipients = ", ".join(party_by_id[r]["name"] for r in u.get("recipientIds", []) if r in party_by_id)
-        pf, pt = _date(u.get("periodFrom")), _date(u.get("periodTo"))
-        period = f"{_fmt_d(pf)} – {_fmt_d(pt)}" if pf and pt else (_fmt_d(pf or pt))
-        # lần cập nhật không kèm file vẫn hiện một dòng
-        for fl in u.get("files") or [None]:
-            ext = fl["name"].rsplit(".", 1)[-1].upper() if fl and "." in fl["name"] else ""
-            up_rows.append([
-                PARTY.get(u["partyType"], u["partyType"]),
-                party.get("name", "—"),
-                task.get("name", ""),
-                _date(u.get("sentDate")),
-                period,
-                recipients,
-                u.get("description", ""),
-                u.get("adminNote", ""),
-                fl["name"] if fl else "",
-                ext,
-                fl["size"] / 1048576 if fl else None,
-                fl.get("version", 1) if fl else None,
-                _dt_vn(u["createdAt"]),
-                "Đã ẩn" if u.get("hidden") else "Hiện",
-            ])
-            up_keys.append(fl.get("key") if fl else None)
-    first = table(
-        [("Loại bên", t_text), ("Tên bên", t_text), ("Hạng mục", t_text), ("Ngày gửi", t_date), ("Kỳ báo cáo", t_center),
-         ("Bên nhận", t_text), ("Mô tả", t_text), ("Ghi chú Admin", t_text), ("Tên file", t_text), ("Loại", t_center),
-         ("Dung lượng", t_mb), ("Phiên bản", t_int), ("Đăng tải lúc", t_dt), ("Trạng thái", t_center)],
-        up_rows, "tblLichSu",
-    )
-    if first is not None and link_base:
-        for i, key in enumerate(up_keys):
-            if key:
-                url = f"{link_base.rstrip('/')}/download?p={quote(view['project']['id'], safe='')}&k={quote(key, safe='')}"
-                ws.write_url(first + i, 9, url, link_fmt, string=up_rows[i][8], tip="Bấm để tải file (cần đăng nhập Admin)")
+    for n, (ptype, plabel) in enumerate(PARTY.items(), 1):
+        ws.write(row, 1, f"5.{n}. Lịch sử đăng tải của {plabel}", sub_head)
+        row += 1
+        up_rows, up_keys = [], []
+        for u in (x for x in uploads if x["partyType"] == ptype):
+            party = party_by_id.get(u["partyId"], {})
+            task = task_by_id.get(u.get("taskId"), {})
+            recipients = ", ".join(party_by_id[r]["name"] for r in u.get("recipientIds", []) if r in party_by_id)
+            pf, pt = _date(u.get("periodFrom")), _date(u.get("periodTo"))
+            period = f"{_fmt_d(pf)} – {_fmt_d(pt)}" if pf and pt else (_fmt_d(pf or pt))
+            # lần cập nhật không kèm file vẫn hiện một dòng
+            for fl in u.get("files") or [None]:
+                ext = fl["name"].rsplit(".", 1)[-1].upper() if fl and "." in fl["name"] else ""
+                up_rows.append([
+                    party.get("name", "—"),
+                    task.get("name", ""),
+                    _date(u.get("sentDate")),
+                    period,
+                    recipients,
+                    u.get("description", ""),
+                    u.get("adminNote", ""),
+                    fl["name"] if fl else "",
+                    ext,
+                    fl["size"] / 1048576 if fl else None,
+                    fl.get("version", 1) if fl else None,
+                    _dt_vn(u["createdAt"]),
+                    "Đã ẩn" if u.get("hidden") else "Hiện",
+                ])
+                up_keys.append(fl.get("key") if fl else None)
+        first = table(
+            [("Tên bên", t_text), ("Hạng mục", t_text), ("Ngày gửi", t_date), ("Kỳ báo cáo", t_center),
+             ("Bên nhận", t_text), ("Mô tả", t_text), ("Ghi chú Admin", t_text), ("Tên file", t_text), ("Loại", t_center),
+             ("Dung lượng", t_mb), ("Phiên bản", t_int), ("Đăng tải lúc", t_dt), ("Trạng thái", t_center)],
+            up_rows, f"tblLichSu{n}",
+        )
+        if first is not None and link_base:
+            for i, key in enumerate(up_keys):
+                if key:
+                    url = f"{link_base.rstrip('/')}/download?p={quote(view['project']['id'], safe='')}&k={quote(key, safe='')}"
+                    ws.write_url(first + i, 8, url, link_fmt, string=up_rows[i][7], tip="Bấm để tải file (cần đăng nhập Admin)")
+        row += 1
 
     # ----- In ấn -----
     ws.set_landscape()

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Download, EyeOff, FileSpreadsheet, FileText } from "lucide-react";
-import { api, patch, type ProjectView, type UploadRecord } from "../lib/api";
+import { api, patch, type PartyType, type ProjectView, type UploadRecord } from "../lib/api";
 import { fmtDate, fmtDateTime, fmtSize, PARTY_LABEL } from "../lib/format";
 import { Empty, ErrorBox, Skeleton, StatusBadge } from "../components/ui";
 import { DeleteProject } from "../components/DeleteProject";
@@ -153,21 +153,30 @@ export default function ProjectPage({ admin = false }: { admin?: boolean }) {
       {tab === "Lịch sử cập nhật" && (
         <section className="space-y-4">
           {admin && <UploadForm projectId={id} parties={parties} tasks={tasks} onDone={refresh} />}
-          {uploads.length === 0 ? (
-            <Empty title="Chưa có cập nhật" />
-          ) : (
-            uploads.map((u) => (
-              <UploadRow
-                key={u.id}
-                u={u}
-                admin={admin}
-                projectId={id}
-                partyName={partyName(u.partyId)}
-                taskName={taskName(u.taskId)}
-                onChanged={refresh}
-              />
-            ))
-          )}
+          {uploads.length === 0 && <Empty title="Chưa có cập nhật" />}
+          {(Object.keys(PARTY_LABEL) as PartyType[]).map((t) => {
+            const list = uploads.filter((u) => u.partyType === t);
+            return (
+              <div key={t} className="space-y-3">
+                <h3 className="font-semibold">Lịch sử đăng tải của {PARTY_LABEL[t]} ({list.length})</h3>
+                {list.length === 0 ? (
+                  <p className="text-sm text-slate-400">Chưa có cập nhật.</p>
+                ) : (
+                  list.map((u) => (
+                    <UploadRow
+                      key={u.id}
+                      u={u}
+                      admin={admin}
+                      projectId={id}
+                      partyName={partyName(u.partyId)}
+                      taskName={taskName(u.taskId)}
+                      onChanged={refresh}
+                    />
+                  ))
+                )}
+              </div>
+            );
+          })}
         </section>
       )}
     </div>
