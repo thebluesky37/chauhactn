@@ -25,7 +25,10 @@ def table():
 def s3():
     global _s3
     if _s3 is None:
-        _s3 = boto3.client("s3", config=_S3_CONFIG)
+        # Local (LocalStack) không phân giải được tên miền kiểu virtual-host nên dùng path style.
+        local = os.environ.get("AWS_ENDPOINT_URL")
+        cfg = Config(signature_version="s3v4", s3={"addressing_style": "path"}) if local else _S3_CONFIG
+        _s3 = boto3.client("s3", config=cfg)
     return _s3
 
 
