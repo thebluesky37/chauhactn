@@ -1,6 +1,6 @@
-import { Link, Navigate, Outlet, Route, Routes, useLocation, useNavigate } from "react-router-dom";
-import { Building2, LogOut } from "lucide-react";
-import { getToken, logout } from "./lib/auth";
+import { Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { getToken } from "./lib/auth";
+import Layout from "./components/Layout";
 import Home from "./pages/Home";
 import ProjectPage from "./pages/ProjectPage";
 import Login from "./pages/Login";
@@ -8,48 +8,6 @@ import AdminProjects from "./pages/AdminProjects";
 import Download from "./pages/Download";
 import ScopeCatalog from "./pages/ScopeCatalog";
 import ProjectEdit from "./pages/ProjectEdit";
-
-function Layout() {
-  const nav = useNavigate();
-  const admin = !!getToken();
-  return (
-    <div className="flex min-h-screen flex-col">
-      <header className="sticky top-0 z-10 border-b border-slate-200 bg-white/90 backdrop-blur dark:border-slate-800 dark:bg-slate-900/90">
-        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
-          <Link to="/" className="flex items-center gap-2 font-bold text-brand-700 dark:text-brand-100">
-            <span className="grid h-9 w-9 place-items-center rounded-lg bg-brand-600 text-white">
-              <Building2 size={20} />
-            </span>
-            Quản lý Dự án
-          </Link>
-          <nav className="flex items-center gap-2">
-            {admin ? (
-              <>
-                <Link to="/admin" className="btn-ghost">Quản trị</Link>
-                <Link to="/admin/scopes" className="btn-ghost">Danh mục scope</Link>
-                <button
-                  className="btn-ghost"
-                  aria-label="Đăng xuất"
-                  onClick={() => {
-                    logout();
-                    nav("/");
-                  }}
-                >
-                  <LogOut size={16} />
-                </button>
-              </>
-            ) : (
-              <Link to="/login" className="btn-ghost">Đăng nhập Admin</Link>
-            )}
-          </nav>
-        </div>
-      </header>
-      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8">
-        <Outlet />
-      </main>
-    </div>
-  );
-}
 
 function RequireAdmin({ children }: { children: JSX.Element }) {
   const loc = useLocation();
