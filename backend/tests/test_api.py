@@ -275,3 +275,22 @@ def test_party_scopes(aws):
     assert "VII. HỆ THỐNG KHÍ NÉN" in text and "X" in text and "Ghi chú khí nén" in text
     assert "Ghi chú" in text and "KT\n(Kiến trúc)" not in text  # Kiến trúc không có cột scope
     assert "Thầu mới\n(Thầu phụ)" in text
+
+
+def test_delete_party(aws):
+    from admin_api import handler as admin
+
+    _, p = call(admin, event("POST", "/admin/projects", {"name": "P", "startDate": "2026-01-01", "plannedEndDate": "2026-12-31"}))
+    base = f"/admin/projects/{p['id']}/parties"
+    _, free = call(admin, event("POST", base, {"type": "investor", "name": "Tự do"}))
+    _, sub = call(admin, event("POST", base, {"type": "subcontractor", "name": "Thầu"}))
+    call(admin, event("POST", f"/admin/projects/{p['id']}/tasks", {"partyId": sub["id"], "name": "Móng", "startDate": "2026-01-01", "endDate": "2026-02-01"}))
+
+    code, _ = call(admin, event("DELETE", f"{base}/{sub['id']}"))
+    assert code == 409  # còn hạng mục
+    code, _ = call(admin, event("DELETE", f"{base}/{free['id']}"))
+    assert code == 200
+    code, _ = call(admin, event("DELETE", f"{base}/{free['id']}"))
+    assert code == 404
+    code, _ = call(admin, event("DELETE", f"{base}/{free['id']}", groups="[]"))
+    assert code in (403, 404)

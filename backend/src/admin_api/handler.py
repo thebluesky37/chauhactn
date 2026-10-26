@@ -237,6 +237,30 @@ def update_party(event, project_id, party_id):
     return response(200, db.strip_keys(item))
 
 
+@router.route("DELETE", "/projects/{project_id}/parties/{party_id}")
+def delete_party(event, project_id, party_id):
+    """Xóa một bên. Từ chối nếu còn hạng mục hoặc bản ghi đăng tải liên quan, để không mất dữ liệu."""
+    _require_admin(event)
+    key = {"PK": f"PROJECT#{project_id}", "SK": f"PARTY#{party_id}"}
+    item = db.table().get_item(Key=key).get("Item")
+    if not item:
+        raise HttpError(404, "Không tìm thấy bên tham gia")
+    tasks = [t for t in db.query_all(f"PROJECT#{project_id}", "TASK#") if t["partyId"] == party_id]
+    uploads = [
+        u for u in db.query_all(f"PROJECT#{project_id}", "UPLOAD#")
+        if u["partyId"] == party_id or party_id in u.get("recipientIds", [])
+    ]
+    if tasks or uploads:
+        raise HttpError(
+            409,
+            f"Không thể xóa: bên này còn {len(tasks)} hạng mục và {len(uploads)} bản ghi đăng tải liên quan. "
+            "Xóa các mục đó trước.",
+        )
+    db.table().delete_item(Key=key)
+    _audit(event, "party.delete", {"project": project_id, "id": party_id, "name": item["name"]})
+    return response(200, {"deleted": party_id})
+
+
 @router.route("POST", "/projects/{project_id}/tasks")
 def add_task(event, project_id):
     _require_admin(event)

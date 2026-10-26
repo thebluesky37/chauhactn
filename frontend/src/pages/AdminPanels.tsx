@@ -89,6 +89,10 @@ export function EditPartyForm({ projectId, party, onDone, onCancel }: { projectI
     mutationFn: () => patch(`/admin/projects/${projectId}/parties/${party.id}`, { name, contactName, phone, email, scopeIds, scopeNotes }),
     onSuccess: onDone,
   });
+  const del = useMutation({
+    mutationFn: () => api(`/admin/projects/${projectId}/parties/${party.id}`, { method: "DELETE" }),
+    onSuccess: onDone,
+  });
   return (
     <form className="card col-span-full grid gap-4 p-5 sm:grid-cols-2" onSubmit={(e) => { e.preventDefault(); m.mutate(); }}>
       <h3 className="font-semibold sm:col-span-2">Sửa {PARTY_LABEL[party.type]}</h3>
@@ -98,9 +102,18 @@ export function EditPartyForm({ projectId, party, onDone, onCancel }: { projectI
       <Field label="Email"><input className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} /></Field>
       {SCOPE_PARTY_TYPES.includes(party.type) && <div className="sm:col-span-2"><ScopePicker value={scopeIds} notes={scopeNotes} onChange={(v, n) => { setScopes(v); setNotes(n); }} /></div>}
       {m.error ? <div className="sm:col-span-2"><ErrorBox error={m.error} /></div> : null}
-      <div className="flex gap-3 sm:col-span-2">
+      {del.error ? <div className="sm:col-span-2"><ErrorBox error={del.error} /></div> : null}
+      <div className="flex flex-wrap gap-3 sm:col-span-2">
         <button className="btn-primary" disabled={m.isPending}>Lưu</button>
         <button type="button" className="btn-ghost" onClick={onCancel}>Hủy</button>
+        <button
+          type="button"
+          className="btn-ghost ml-auto !text-red-600"
+          disabled={del.isPending}
+          onClick={() => { if (window.confirm(`Xóa “${party.name}” khỏi dự án? Không hoàn tác được.`)) del.mutate(); }}
+        >
+          {del.isPending ? "Đang xóa…" : "Xóa bên này"}
+        </button>
       </div>
     </form>
   );
