@@ -3,7 +3,8 @@ import { useMutation } from "@tanstack/react-query";
 import { post, uploadFile, type Party, type PartyType, type Task } from "../lib/api";
 import { PARTY_LABEL } from "../lib/format";
 import { ErrorBox, Field } from "../components/ui";
-import { api } from "../lib/api";
+import { api, patch } from "../lib/api";
+import { SCOPE_GROUPS, SCOPE_PARTY_TYPES } from "../lib/scopes";
 
 export function NoteForm({ projectId, initial, onDone }: { projectId: string; initial: string; onDone: () => void }) {
   const [text, setText] = useState(initial);
@@ -22,15 +23,84 @@ export function NoteForm({ projectId, initial, onDone }: { projectId: string; in
   );
 }
 
+export function ScopePicker({ value, onChange }: { value: string[]; onChange: (v: string[]) => void }) {
+  const set = new Set(value);
+  const toggleGroup = (ids: string[], on: boolean) => {
+    const next = new Set(set);
+    ids.forEach((i) => (on ? next.add(i) : next.delete(i)));
+    onChange([...next]);
+  };
+  const toggleItem = (id: string, on: boolean) => toggleGroup([id], on);
+  return (
+    <fieldset className="space-y-3">
+      <legend className="label">Scope công việc (không bắt buộc)</legend>
+      {SCOPE_GROUPS.map((g) => {
+        const ids = g.items.map((i) => i.id);
+        const count = ids.filter((i) => set.has(i)).length;
+        return (
+          <div key={g.code} className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
+            <label className="flex items-center gap-2 text-sm font-semibold">
+              <input
+                type="checkbox"
+                className="h-5 w-5 accent-brand-600"
+                checked={count === ids.length}
+                ref={(el) => { if (el) el.indeterminate = count > 0 && count < ids.length; }}
+                onChange={(e) => toggleGroup(ids, e.target.checked)}
+              />
+              {g.code}. {g.title}
+            </label>
+            <div className="mt-2 grid gap-2 pl-7 sm:grid-cols-2">
+              {g.items.map((i) => (
+                <label key={i.id} className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" className="h-5 w-5 accent-brand-600" checked={set.has(i.id)} onChange={(e) => toggleItem(i.id, e.target.checked)} />
+                  {i.name}
+                </label>
+              ))}
+            </div>
+          </div>
+        );
+      })}
+    </fieldset>
+  );
+}
+
+export function EditPartyForm({ projectId, party, onDone, onCancel }: { projectId: string; party: Party; onDone: () => void; onCancel: () => void }) {
+  const [name, setName] = useState(party.name);
+  const [contactName, setContact] = useState(party.contactName ?? "");
+  const [phone, setPhone] = useState(party.phone ?? "");
+  const [email, setEmail] = useState(party.email ?? "");
+  const [scopeIds, setScopes] = useState<string[]>(party.scopeIds ?? []);
+  const m = useMutation({
+    mutationFn: () => patch(`/admin/projects/${projectId}/parties/${party.id}`, { name, contactName, phone, email, scopeIds }),
+    onSuccess: onDone,
+  });
+  return (
+    <form className="card col-span-full grid gap-4 p-5 sm:grid-cols-2" onSubmit={(e) => { e.preventDefault(); m.mutate(); }}>
+      <h3 className="font-semibold sm:col-span-2">Sửa {PARTY_LABEL[party.type]}</h3>
+      <Field label="Tên"><input className="input" required value={name} onChange={(e) => setName(e.target.value)} /></Field>
+      <Field label="Người đại diện"><input className="input" value={contactName} onChange={(e) => setContact(e.target.value)} /></Field>
+      <Field label="Điện thoại"><input className="input" value={phone} onChange={(e) => setPhone(e.target.value)} /></Field>
+      <Field label="Email"><input className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} /></Field>
+      {SCOPE_PARTY_TYPES.includes(party.type) && <div className="sm:col-span-2"><ScopePicker value={scopeIds} onChange={setScopes} /></div>}
+      {m.error ? <div className="sm:col-span-2"><ErrorBox error={m.error} /></div> : null}
+      <div className="flex gap-3 sm:col-span-2">
+        <button className="btn-primary" disabled={m.isPending}>Lưu</button>
+        <button type="button" className="btn-ghost" onClick={onCancel}>Hủy</button>
+      </div>
+    </form>
+  );
+}
+
 export function AddPartyForm({ projectId, onDone }: { projectId: string; onDone: () => void }) {
   const [type, setType] = useState<PartyType>("investor");
   const [name, setName] = useState("");
   const [contactName, setContact] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
+  const [scopeIds, setScopes] = useState<string[]>([]);
   const m = useMutation({
-    mutationFn: () => post(`/admin/projects/${projectId}/parties`, { type, name, contactName, phone, email }),
-    onSuccess: () => { setName(""); setContact(""); setPhone(""); setEmail(""); onDone(); },
+    mutationFn: () => post(`/admin/projects/${projectId}/parties`, { type, name, contactName, phone, email, scopeIds: SCOPE_PARTY_TYPES.includes(type) ? scopeIds : [] }),
+    onSuccess: () => { setName(""); setContact(""); setPhone(""); setEmail(""); setScopes([]); onDone(); },
   });
   return (
     <form className="card grid gap-4 p-5 sm:grid-cols-2" onSubmit={(e) => { e.preventDefault(); m.mutate(); }}>
@@ -44,6 +114,7 @@ export function AddPartyForm({ projectId, onDone }: { projectId: string; onDone:
       <Field label="Người đại diện"><input className="input" value={contactName} onChange={(e) => setContact(e.target.value)} /></Field>
       <Field label="Điện thoại"><input className="input" value={phone} onChange={(e) => setPhone(e.target.value)} /></Field>
       <Field label="Email"><input className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} /></Field>
+      {SCOPE_PARTY_TYPES.includes(type) && <div className="sm:col-span-2"><ScopePicker value={scopeIds} onChange={setScopes} /></div>}
       {m.error ? <div className="sm:col-span-2"><ErrorBox error={m.error} /></div> : null}
       <div className="sm:col-span-2"><button className="btn-primary" disabled={m.isPending}>Thêm</button></div>
     </form>

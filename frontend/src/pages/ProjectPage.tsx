@@ -6,7 +6,8 @@ import { api, patch, type PartyType, type ProjectView, type UploadRecord } from 
 import { fmtDate, fmtDateTime, fmtSize, PARTY_LABEL } from "../lib/format";
 import { Empty, ErrorBox, Skeleton, StatusBadge } from "../components/ui";
 import { DeleteProject } from "../components/DeleteProject";
-import { AddPartyForm, AddTaskForm, NoteForm, UploadForm } from "./AdminPanels";
+import { AddPartyForm, AddTaskForm, EditPartyForm, NoteForm, UploadForm } from "./AdminPanels";
+import { SCOPE_GROUPS } from "../lib/scopes";
 
 const EXPORT_PRESETS: { label: string; types: PartyType[] }[] = [
   { label: "Chủ đầu tư + Thầu phụ", types: ["investor", "subcontractor"] },
@@ -30,6 +31,7 @@ export default function ProjectPage({ admin = false }: { admin?: boolean }) {
   });
 
   const [exportPreset, setExportPreset] = useState(0);
+  const [editingParty, setEditingParty] = useState<string | null>(null);
   const exportXlsx = useMutation({
     mutationFn: () => api<{ url: string }>(`/admin/projects/${id}/export?parties=${EXPORT_PRESETS[exportPreset].types.join(",")}`),
     onSuccess: (r) => { window.location.href = r.url; },
@@ -145,15 +147,29 @@ export default function ProjectPage({ admin = false }: { admin?: boolean }) {
             <Empty title="Chưa có bên tham gia" />
           ) : (
             <div className="grid gap-3 sm:grid-cols-2">
-              {parties.map((x) => (
-                <div key={x.id} className="card p-4">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-brand-600">{PARTY_LABEL[x.type]}</p>
-                  <p className="mt-1 font-semibold">{x.name}</p>
-                  <p className="mt-1 text-sm text-slate-500">
-                    {[x.contactName, x.phone, x.email].filter(Boolean).join(" · ") || "Chưa có liên hệ"}
-                  </p>
-                </div>
-              ))}
+              {parties.map((x) =>
+                editingParty === x.id ? (
+                  <EditPartyForm
+                    key={x.id}
+                    projectId={id}
+                    party={x}
+                    onDone={() => { setEditingParty(null); refresh(); }}
+                    onCancel={() => setEditingParty(null)}
+                  />
+                ) : (
+                  <div key={x.id} className="card p-4">
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-brand-600">{PARTY_LABEL[x.type]}</p>
+                      {admin && <button className="btn-ghost !min-h-[32px] !px-3 text-sm" onClick={() => setEditingParty(x.id)}>Sửa</button>}
+                    </div>
+                    <p className="mt-1 font-semibold">{x.name}</p>
+                    <p className="mt-1 text-sm text-slate-500">
+                      {[x.contactName, x.phone, x.email].filter(Boolean).join(" · ") || "Chưa có liên hệ"}
+                    </p>
+                    <PartyScopes ids={x.scopeIds ?? []} />
+                  </div>
+                ),
+              )}
             </div>
           )}
           {admin && <AddPartyForm projectId={id} onDone={refresh} />}
@@ -210,6 +226,23 @@ export default function ProjectPage({ admin = false }: { admin?: boolean }) {
           })}
         </section>
       )}
+    </div>
+  );
+}
+
+function PartyScopes({ ids }: { ids: string[] }) {
+  const set = new Set(ids);
+  const groups = SCOPE_GROUPS.map((g) => ({ g, picked: g.items.filter((i) => set.has(i.id)) })).filter((x) => x.picked.length > 0);
+  if (groups.length === 0) return null;
+  return (
+    <div className="mt-3 space-y-1 border-t border-slate-200 pt-3 text-sm dark:border-slate-800">
+      <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Scope công việc</p>
+      {groups.map(({ g, picked }) => (
+        <p key={g.code}>
+          <span className="font-medium">{g.code}. {g.title}:</span>{" "}
+          <span className="text-slate-600 dark:text-slate-300">{picked.length === g.items.length ? "Tất cả" : picked.map((i) => i.name).join(", ")}</span>
+        </p>
+      ))}
     </div>
   );
 }

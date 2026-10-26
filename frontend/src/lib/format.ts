@@ -12,7 +12,7 @@ export const STATUS_STYLE: Record<Status, string> = {
 };
 export const PARTY_LABEL: Record<PartyType, string> = {
   investor: "Chủ đầu tư",
-  architect: "Kiến trúc sư",
+  architect: "Kiến trúc",
   coordinator: "Tổng thầu MEP",
   subcontractor: "Thầu phụ",
 };

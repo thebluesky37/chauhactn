@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 
 from common import db
 from common.http import HttpError, Router, parse_body, response
+from common.scopes import SCOPE_PARTY_TYPES, SCOPES
 
 router = Router("/admin")
 
@@ -52,6 +53,17 @@ def _require(data, *fields):
     missing = [f for f in fields if not data.get(f)]
     if missing:
         raise HttpError(400, "Thiếu trường bắt buộc: " + ", ".join(missing))
+
+
+def _clean_scopes(party_type, scope_ids):
+    """Kiểm tra scope hợp lệ; Kiến trúc không có scope. Trả danh sách theo thứ tự danh mục, không trùng."""
+    if party_type not in SCOPE_PARTY_TYPES:
+        return []
+    wanted = set(scope_ids or [])
+    unknown = wanted - set(SCOPES)
+    if unknown:
+        raise HttpError(400, "Scope không hợp lệ: " + ", ".join(sorted(unknown)))
+    return [sid for sid in SCOPES if sid in wanted]
 
 
 def _project_or_404(project_id):
@@ -184,9 +196,31 @@ def add_party(event, project_id):
         "contactName": data.get("contactName", ""),
         "phone": data.get("phone", ""),
         "email": data.get("email", ""),
+        "scopeIds": _clean_scopes(data["type"], data.get("scopeIds")),
     }
     db.table().put_item(Item=item)
     return response(201, db.strip_keys(item))
+
+
+@router.route("PATCH", "/projects/{project_id}/parties/{party_id}")
+def update_party(event, project_id, party_id):
+    """Sửa thông tin và scope của một bên."""
+    _require_admin(event)
+    resp = db.table().get_item(Key={"PK": f"PROJECT#{project_id}", "SK": f"PARTY#{party_id}"})
+    item = resp.get("Item")
+    if not item:
+        raise HttpError(404, "Không tìm thấy bên tham gia")
+    data = parse_body(event)
+    for f in ("name", "contactName", "phone", "email"):
+        if f in data:
+            item[f] = data[f]
+    if not item.get("name"):
+        raise HttpError(400, "Tên không được để trống")
+    if "scopeIds" in data:
+        item["scopeIds"] = _clean_scopes(item["type"], data["scopeIds"])
+    db.table().put_item(Item=item)
+    _audit(event, "party.update", {"project": project_id, "id": party_id})
+    return response(200, db.strip_keys(item))
 
 
 @router.route("POST", "/projects/{project_id}/tasks")

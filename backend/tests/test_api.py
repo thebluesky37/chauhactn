@@ -241,3 +241,30 @@ def test_export_filtered_by_party_type():
     assert "Thầu B" in text and "CĐT" in text and "KTS C" not in text
     assert "tblLichSu3" not in ws.tables  # kiến trúc sư (loại thứ 2) bị loại
     assert {"tblLichSu1", "tblLichSu4"} <= set(ws.tables) and "tblLichSu2" not in ws.tables
+
+
+def test_party_scopes(aws):
+    import io
+
+    from openpyxl import load_workbook
+
+    from admin_api import handler as admin
+    from admin_api.export import build_workbook
+    from common import db
+
+    _, p = call(admin, event("POST", "/admin/projects", {"name": "P", "startDate": "2026-01-01", "plannedEndDate": "2026-12-31"}))
+    base = f"/admin/projects/{p['id']}/parties"
+    code, sub = call(admin, event("POST", base, {"type": "subcontractor", "name": "Thầu", "scopeIds": ["I.2", "I.1", "II.1"]}))
+    assert code == 201 and sub["scopeIds"] == ["I.1", "I.2", "II.1"]  # theo thứ tự danh mục
+    code, kts = call(admin, event("POST", base, {"type": "architect", "name": "KT", "scopeIds": ["I.1"]}))
+    assert kts["scopeIds"] == []  # Kiến trúc không có scope
+    code, _ = call(admin, event("POST", base, {"type": "investor", "name": "X", "scopeIds": ["Z.9"]}))
+    assert code == 400
+    code, upd = call(admin, event("PATCH", f"{base}/{sub['id']}", {"name": "Thầu mới", "scopeIds": ["VII.1"]}))
+    assert code == 200 and upd["name"] == "Thầu mới" and upd["scopeIds"] == ["VII.1"]
+    code, _ = call(admin, event("PATCH", f"{base}/nope", {"name": "x"}))
+    assert code == 404
+
+    ws = load_workbook(io.BytesIO(build_workbook(db.project_view(p["id"])))).active
+    text = [str(c.value) for row in ws.iter_rows() for c in row if c.value is not None]
+    assert "VII. HỆ THỐNG KHÍ NÉN: (tất cả)" in text

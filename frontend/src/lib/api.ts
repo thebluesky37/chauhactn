@@ -22,6 +22,7 @@ export interface Party {
   contactName?: string;
   phone?: string;
   email?: string;
+  scopeIds?: string[];
 }
 export interface Task {
   id: string;

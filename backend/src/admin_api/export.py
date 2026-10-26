@@ -5,12 +5,14 @@ from datetime import datetime, timedelta, timezone
 
 import xlsxwriter
 
+from common.scopes import SCOPE_GROUPS
+
 VN = timezone(timedelta(hours=7))
 
 STATUS = {"in_progress": "Đang thực hiện", "paused": "Tạm dừng", "done": "Hoàn thành"}
 PARTY = {
     "investor": "Chủ đầu tư",
-    "architect": "Kiến trúc sư",
+    "architect": "Kiến trúc",
     "coordinator": "Tổng thầu MEP",
     "subcontractor": "Thầu phụ",
 }
@@ -25,6 +27,20 @@ BORDER = "#CBD5E1"
 WIDTHS = {"A": 2, "B": 22, "C": 30, "D": 24, "E": 16, "F": 28, "G": 24,
           "H": 36, "I": 30, "J": 36, "K": 12, "L": 13, "M": 10, "N": 18, "O": 12, "P": 2}
 LAST_COL = 14  # cột O
+
+
+def _scope_text(scope_ids):
+    """Mỗi nhóm một dòng: "I. HỆ THỐNG ĐIỆN: Trung thế, Hạ thế". Chọn đủ nhóm thì ghi "(tất cả)"."""
+    chosen = set(scope_ids or [])
+    lines = []
+    for code, title, items in SCOPE_GROUPS:
+        ids = [f"{code}.{i}" for i in range(1, len(items) + 1)]
+        picked = [name for sid, name in zip(ids, items) if sid in chosen]
+        if not picked:
+            continue
+        detail = "(tất cả)" if len(picked) == len(items) else ", ".join(picked)
+        lines.append(f"{code}. {title}: {detail}")
+    return "\n".join(lines)
 
 
 def _date(s):
@@ -197,8 +213,10 @@ def build_workbook(view, now=None, link_base=None, party_types=None):
     # ----- 3. Các bên tham gia -----
     heading("3. CÁC BÊN THAM GIA")
     table(
-        [("Loại bên", t_text), ("Tên", t_text), ("Người đại diện", t_text), ("Điện thoại", t_center), ("Email", t_text)],
-        [[PARTY[x["type"]], x["name"], x.get("contactName", ""), x.get("phone", ""), x.get("email", "")] for x in parties],
+        [("Loại bên", t_text), ("Tên", t_text), ("Người đại diện", t_text), ("Điện thoại", t_center), ("Email", t_text),
+         ("Scope công việc", t_text)],
+        [[PARTY[x["type"]], x["name"], x.get("contactName", ""), x.get("phone", ""), x.get("email", ""),
+          _scope_text(x.get("scopeIds"))] for x in parties],
         "tblCacBen",
     )
 
