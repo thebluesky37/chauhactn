@@ -127,7 +127,7 @@ def test_export_workbook_single_sheet():
     wb = load_workbook(io.BytesIO(build_workbook(view)))
     assert wb.sheetnames == ["Báo cáo dự án"]
     ws = wb.active
-    assert set(ws.tables) == {"tblCacBen", "tblHangMuc", "tblLichSu4"}  # mỗi bên một bảng, chỉ bên có dữ liệu mới có bảng
+    assert set(ws.tables) == {"tblHangMuc", "tblLichSu4"}  # mỗi bên một bảng, chỉ bên có dữ liệu mới có bảng
     text = [str(c.value) for row in ws.iter_rows() for c in row if c.value is not None]
     assert any("TÒA NHÀ A" in t for t in text)
     assert "Đã ẩn" in text  # bản ghi ẩn vẫn được xuất, có cột trạng thái

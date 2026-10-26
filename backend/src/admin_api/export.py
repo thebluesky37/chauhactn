@@ -201,16 +201,8 @@ def build_workbook(view, now=None, link_base=None, party_types=None):
 
     hdr = f(bold=True, font_color="#FFFFFF", bg_color=BLUE, align="center", text_wrap=True, border=1, border_color="#FFFFFF")
 
-    # ----- 3. Các bên tham gia -----
-    heading("3. CÁC BÊN THAM GIA")
-    table(
-        [("Loại bên", t_text), ("Tên", t_text), ("Người đại diện", t_text), ("Điện thoại", t_center), ("Email", t_text)],
-        [[PARTY[x["type"]], x["name"], x.get("contactName", ""), x.get("phone", ""), x.get("email", "")] for x in parties],
-        "tblCacBen",
-    )
-
-    # ----- 4. Scope công việc (hàng = scope, cột = bên, X = được giao) -----
-    heading("4. SCOPE CÔNG VIỆC")
+    # ----- 3. Scope công việc (hàng = scope, cột = bên, X = được giao) -----
+    heading("3. SCOPE CÔNG VIỆC")
     scope_parties = [x for x in parties if x["type"] in SCOPE_PARTY_TYPES]
     if not scope_parties:
         ws.merge_range(row, 1, row, 3, "Chưa có dữ liệu.", empty)
@@ -238,8 +230,8 @@ def build_workbook(view, now=None, link_base=None, party_types=None):
                         ws.write(row, 3 + j, x.get("scopeNotes", {}).get(sid, ""), cell_note)
                     row += 1
 
-    # ----- 5. Hạng mục thầu phụ -----
-    heading("5. HẠNG MỤC THẦU PHỤ")
+    # ----- 4. Hạng mục thầu phụ -----
+    heading("4. HẠNG MỤC THẦU PHỤ")
     counts, latest = {}, {}
     for u in uploads:
         tid = u.get("taskId")
@@ -263,12 +255,12 @@ def build_workbook(view, now=None, link_base=None, party_types=None):
     )
 
     # ----- 5. Lịch sử đăng tải (mỗi bên một bảng, mỗi file một dòng) -----
-    heading("6. LỊCH SỬ ĐĂNG TẢI")
+    heading("5. LỊCH SỬ ĐĂNG TẢI")
     for n, ptype in enumerate(PARTY, 1):
         if ptype not in types:
             continue
         plabel = PARTY[ptype]
-        ws.write(row, 1, f"6.{n}. Lịch sử đăng tải của {plabel}", sub_head)
+        ws.write(row, 1, f"5.{n}. Lịch sử đăng tải của {plabel}", sub_head)
         row += 1
         up_rows, up_keys = [], []
         for u in (x for x in uploads if x["partyType"] == ptype):
